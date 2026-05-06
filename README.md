@@ -1,46 +1,124 @@
-# Tom Basketball Training Calendar
+# Tom Basketball Training Dashboard
 
-Smart mobile-first basketball training assistant for Tom. The app detects the current date and time, reads the training calendar, and puts the most useful answer first: what Tom should do right now.
+Smart basketball performance dashboard for Tom. It detects the current date and time, reads the training plan, and puts the most important answer first: what to do now.
 
-## Key Features
+## UI Overview
 
-- Smart Now screen with current session, next session, missed-session guidance, and post-training reminders.
-- Time engine for exact daily blocks, including active drill calculation based on elapsed session minutes.
-- Today timeline with completed, now, next, missed, later, optional, and recovery statuses.
-- Thursday AM basketball ON/OFF toggle saved per Thursday date.
-- Plan B drawer for court busy, rain, darkness, low sleep, high soreness, and Thursday branch changes.
-- Collapsed drill cards with exact instructions, cues, tracking, mistakes, easier and harder versions.
-- Mobile bottom navigation and desktop planner layout with a side timeline and weekly stats.
-- Logging for sleep, soreness, confidence, energy, shooting stats, left-hand finishing, miss pattern, pain warning, best drill, worst problem, and notes.
-- Data Backup tab with cross-device copy/import, backup download, logs CSV, plan JSON, settings, and ChatGPT review pack.
-- Basic PWA metadata with `manifest.webmanifest` and an SVG app icon.
+- **Now:** smart session card, action buttons, today timeline, current/next drill, branch choices, Plan B, and full session details.
+- **Progress:** interactive SVG graphs from saved logs and completion data.
+- **Plan:** weekly phase overview and exact calendar sessions.
+- **Log:** session stats for sleep, soreness, confidence, shooting, left-hand finishing, miss pattern, pain, and notes.
+- **Data:** backup/export/import, ChatGPT review pack, and settings.
+- **Settings:** desktop sidebar shortcut for the same saved settings.
 
-## Data And Settings
+Mobile uses bottom navigation. Desktop uses a sidebar with a main panel and right dashboard panel, so it does not feel like a stretched phone app.
+
+## Smart Now Screen
+
+The app uses `new Date()` to calculate:
+
+- current day and selected plan day
+- active session
+- next session
+- missed sessions
+- current drill inside an active session
+- next drill
+- session progress
+- time until the next session
+- time remaining in the active session
+
+The Now card changes mode:
+
+- calm when a session is more than 60 minutes away
+- prep when it is 60-15 minutes away
+- lock-in under 15 minutes away
+- focus during the active session
+- log/recovery after training
+
+## Session Actions
+
+Each session supports:
+
+- **Start Session**
+- **Complete**
+- **Didn’t happen**
+- **Skip**
+- **Move +30m**
+- **Move +1h**
+- **Move custom**
+- **Log**
+
+These actions save to `localStorage` and update the Now card, timeline, weekly completion, exports, and ChatGPT pack.
+
+## Branch System
+
+Thursday has a clear branch choice saved by date:
+
+- Yes, AM basketball is ON
+- No, AM basketball is OFF
+
+Wednesday has a guided-training check:
+
+- Yes, completed guided training
+- No, it did not happen
+
+The app does not replace Wednesday guided training. It only adds the indoor extra.
+
+## Plan B
+
+Plan B asks what happened and gives exact alternatives for:
+
+- court busy
+- raining
+- too dark
+- slept under 7 hours
+- soreness 7+
+- no time
+- other
+
+Applying Plan B saves an adjustment for that day and includes it in exports.
+
+## Progress Graphs
+
+Progress uses saved logs and completion state.
+
+Graph metrics:
+
+- free throw percentage
+- mid-range percentage
+- three-point percentage
+- left-hand finishing percentage
+- confidence
+- sessions completed
+- drills completed
+- sleep
+
+Ranges:
+
+- last 7 days
+- current week
+- all weeks
+
+Tap or click a graph point to see the date, week, value, and change from the previous point. If there is not enough data, the app asks Tom to log 3 sessions first.
+
+## Data And Storage
 
 The app stores data in browser `localStorage`.
 
-Saved data includes:
+Saved/exported data includes:
 
+- raw logs
+- calculated weekly stats
+- graph data summary
 - completed days
-- completed sessions
-- completed drills
-- logs
-- Thursday branch settings
-- app settings
-- full plan data in exports
-
-Settings include:
-
-- Thursday AM basketball default
-- preferred Sunday start time
-- sleep warning threshold
-- soreness warning threshold
-- court travel time
-- theme: system, light, or dark
-
-## Cross-Device Saving
-
-This is still a static site, so automatic sync across phones/browsers needs a backend later, such as Supabase or Firebase.
+- session completion
+- drill completion
+- Thursday branch choices
+- Wednesday guided-training choices
+- Plan B adjustments
+- settings
+- app version
+- full plan data
 
 Manual cross-device flow:
 
@@ -54,7 +132,7 @@ Imports merge with existing data instead of wiping it.
 
 ## ChatGPT Review Pack
 
-Use `Copy ChatGPT Review Pack` to copy Tom's athlete context, saved logs, settings, weekly stats, selected day, smart timeline data, and full plan data. Paste it into ChatGPT for a practical review of patterns and next-week adjustments.
+Use `Copy ChatGPT Review Pack` to copy Tom’s context, saved logs, settings, session state, branch choices, Plan B adjustments, graph summaries, selected day, smart timeline data, and full plan data.
 
 ## Local Use
 
@@ -68,17 +146,24 @@ python -m http.server 4173
 
 Then open `http://localhost:4173`.
 
-## Render Static Site
+## Vercel Deployment
 
-Use these Render settings:
+This project is Vercel-ready as a static site.
+
+Use:
+
+- Framework Preset: Other
+- Root Directory: leave blank
+- Build Command: leave blank
+- Output Directory: `.`
+
+Render static site settings are the same:
 
 - Root Directory: leave blank
 - Build Command: leave blank
 - Publish Directory: `.`
 
-Render should auto-deploy from GitHub after pushes to `main` if the static site is connected.
-
-## GitHub Workflow
+## GitHub
 
 Repository:
 
@@ -86,7 +171,7 @@ Repository:
 https://github.com/tomjordan-953/tom-basketball-training-calendar
 ```
 
-Typical update flow:
+Update flow:
 
 ```bash
 git add .
@@ -94,11 +179,16 @@ git commit -m "Describe the change"
 git push
 ```
 
-## Future Upgrade Ideas
+## Future Supabase Sync
 
-- Supabase login and automatic sync.
-- Cloud backup history.
-- Coach mode.
-- Video upload and checklist review.
-- Progress charts.
-- More advanced offline service worker.
+Automatic cross-device saving should use Supabase or Firebase later.
+
+Possible Supabase tables:
+
+- `users`
+- `logs`
+- `completion`
+- `settings`
+- `plan_overrides`
+
+For now, saving stays localStorage plus manual import/export.
