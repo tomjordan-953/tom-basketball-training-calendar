@@ -1,0 +1,31 @@
+// CourtSight AI cache schema
+// v1 uses an in-memory cache with TTL for simplicity. This Prisma schema is
+// scaffolded for v2, where cached responses can be persisted to SQLite.
+// See README.md > Roadmap.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model PlayerCache {
+  id        String   @id
+  payload   String
+  updatedAt DateTime @default(now())
+}
+
+model GameLogCache {
+  playerId  String   @id
+  payload   String
+  updatedAt DateTime @default(now())
+}
+
+model ProjectionCache {
+  playerId  String   @id
+  payload   String
+  updatedAt DateTime @default(now())
+}
