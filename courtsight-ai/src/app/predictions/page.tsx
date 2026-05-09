@@ -7,6 +7,8 @@ import { fetchStandings } from "@/lib/data/standings";
 import { fetchLeaders } from "@/lib/data/leagueLeaders";
 import { predictChampionship } from "@/lib/predictions/championship";
 import { predictMVP, predictROY, predictDPOY, type AwardCandidate } from "@/lib/predictions/awards";
+import { buildBracket } from "@/lib/predictions/bracket";
+import { BracketView } from "@/components/predictions/BracketView";
 import { getProvider } from "@/lib/data/providers";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +48,7 @@ export default async function PredictionsPage() {
   ]);
 
   const champ = predictChampionship(standings, leaders, injuredNames);
+  const bracket = buildBracket(champ.ranked);
   const args = { leaders, standings, injuredNames, provider };
   const [mvp, dpoy, roy] = await Promise.all([
     predictMVP(args).catch((): AwardCandidate[] => []),
@@ -117,6 +120,9 @@ export default async function PredictionsPage() {
           </CardBody>
         </Card>
       </section>
+
+      {/* Bracket */}
+      <BracketView bracket={bracket} />
 
       {/* Full ranking */}
       <Card>
