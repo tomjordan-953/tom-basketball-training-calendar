@@ -69,7 +69,7 @@ export default async function Home() {
             <Badge tone={status.isLive ? "positive" : "info"} dot>
               {status.label}
             </Badge>
-            <Badge tone="purple">v2 · Real Data Intelligence</Badge>
+            <Badge tone="purple">v2.2 · Tracking + Tools</Badge>
           </div>
           <h1 className="mt-4 text-3xl lg:text-5xl font-semibold tracking-tight text-white max-w-3xl">
             NBA player projections, with the{" "}

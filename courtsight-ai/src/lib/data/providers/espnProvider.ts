@@ -67,17 +67,40 @@ interface OverviewStatistics {
   splits: OverviewSplit[];
 }
 
+interface NextGameCompetitor {
+  id?: string;
+  homeAway?: "home" | "away";
+  team?: { id?: string; abbreviation?: string };
+}
+
 interface NextGameEvent {
   id: string;
   date: string;
   shortName?: string;
-  competitions?: Array<{
-    competitors?: Array<{
-      id: string;
-      homeAway: "home" | "away";
-      team?: { id: string; abbreviation?: string };
-    }>;
-  }>;
+  name?: string;
+  competitors?: NextGameCompetitor[];
+  competitions?: Array<{ competitors?: NextGameCompetitor[] }>;
+}
+
+interface EspnInjuryItem {
+  id: string;
+  status: string;
+  date?: string;
+  longComment?: string;
+  shortComment?: string;
+  athlete?: { firstName?: string; lastName?: string; displayName?: string };
+}
+interface EspnInjuriesResponse {
+  injuries?: Array<{ id: string; displayName: string; injuries?: EspnInjuryItem[] }>;
+}
+
+function normaliseInjuryStatus(s: string): InjuryNote["status"] {
+  const v = (s ?? "").toLowerCase();
+  if (v.startsWith("out")) return "Out";
+  if (v.includes("doubtful") || v.includes("questionable")) return "Questionable";
+  if (v.includes("day")) return "Day-to-Day";
+  if (v.includes("active") || v.includes("probable")) return "Active";
+  return "Unknown";
 }
 
 interface OverviewResponse {
@@ -94,7 +117,7 @@ interface GamelogEvent {
   awayTeamId?: string;
   gameResult?: "W" | "L";
   opponent?: { id?: string; abbreviation?: string; displayName?: string };
-  team?: { id?: string; abbreviation?: string };
+  team?: { id?: string; abbreviation?: string; displayName?: string };
 }
 
 interface GamelogResponse {
@@ -131,9 +154,9 @@ class EspnProvider implements SportsDataProvider {
       label: "Live • ESPN",
       isLive: true,
       message:
-        "Connected to ESPN public NBA endpoints — live profiles, season averages, and game logs.",
+        "Connected to ESPN public NBA endpoints — live profiles, season averages, game logs, news, and injury report.",
       hasNewsSource: true,
-      hasInjurySource: false,
+      hasInjurySource: true,
       mode,
       apiKeyConfigured: false,
     };
@@ -290,6 +313,23 @@ class EspnProvider implements SportsDataProvider {
       });
     }
     logs.sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    // Backfill the player's current team from the most recent log so that
+    // getNextGame can identify "us" vs "opponent" without a second API call.
+    const recentMeta = logs[0] && data.events[logs[0].id.split("-").slice(-1)[0]];
+    const teamAbbr = recentMeta?.team?.abbreviation;
+    const teamName = recentMeta?.team?.displayName;
+    if (teamAbbr) {
+      const cachedPlayer = cacheGet<Player>(`player:espn:${playerId}`);
+      if (cachedPlayer?.value && !cachedPlayer.value.teamAbbreviation) {
+        cacheSet(
+          `player:espn:${playerId}`,
+          { ...cachedPlayer.value, teamAbbreviation: teamAbbr, team: teamName ?? cachedPlayer.value.team },
+          TTL.player,
+        );
+      }
+    }
+
     return logs.slice(0, limit);
   }
 
@@ -327,14 +367,51 @@ class EspnProvider implements SportsDataProvider {
     const overview = await this.getOverview(playerId);
     const event = overview?.nextGame?.league?.events?.[0];
     if (!event) return null;
-    const competitor = event.competitions?.[0]?.competitors ?? [];
-    const me = competitor.find((c) => c.team?.abbreviation && c.team?.id);
-    const opp = competitor.find((c) => c !== me);
-    if (!opp) return null;
+
+    // ESPN puts competitors directly on the event for some payloads, and under
+    // event.competitions[0] for others.
+    const competitors =
+      (event.competitors && event.competitors.length > 0
+        ? event.competitors
+        : event.competitions?.[0]?.competitors) ?? [];
+
+    let opponentAbbr: string | undefined;
+    let homeAway: "home" | "away" = "home";
+
+    let player = await this.getPlayer(playerId);
+    if (player && !player.teamAbbreviation) {
+      // Trigger gamelog fetch so player cache gets enriched with team abbr.
+      await this.getPlayerGameLogs(playerId, 5);
+      player = await this.getPlayer(playerId);
+    }
+    const myTeamAbbr = player?.teamAbbreviation;
+    const me = competitors.find((c) =>
+      myTeamAbbr ? c.team?.abbreviation === myTeamAbbr : false,
+    );
+    const opp = competitors.find((c) => c !== me) ?? competitors[1];
+    opponentAbbr = opp?.team?.abbreviation;
+    if (me?.homeAway) homeAway = me.homeAway;
+
+    // Fallback: parse shortName like "DEN @ MIN" or "DEN vs MIN".
+    if (!opponentAbbr && event.shortName) {
+      const m = /^([A-Z]{2,4})\s*(@|vs)\s*([A-Z]{2,4})$/i.exec(event.shortName);
+      if (m) {
+        const [, a, sep, b] = m;
+        if (myTeamAbbr === a) {
+          opponentAbbr = b;
+          homeAway = sep === "@" ? "away" : "home";
+        } else {
+          opponentAbbr = a;
+          homeAway = sep === "@" ? "home" : "away";
+        }
+      }
+    }
+
+    if (!opponentAbbr) return null;
     return {
       date: event.date.slice(0, 10),
-      opponent: opp.team?.abbreviation ?? "?",
-      homeAway: me?.homeAway ?? "home",
+      opponent: opponentAbbr,
+      homeAway,
       daysOfRest: 1,
       isBackToBack: false,
     };
@@ -346,12 +423,45 @@ class EspnProvider implements SportsDataProvider {
     return this.fallback.getOpponentContext(opponent);
   }
 
-  async getInjuryContext(_playerId: string): Promise<InjuryNote | null> {
-    return {
-      status: "Unknown",
-      note: "No verified injury/news source connected.",
-      source: "—",
-    };
+  async getInjuryContext(playerId: string): Promise<InjuryNote | null> {
+    const player = await this.getPlayer(playerId);
+    if (!player) return null;
+    const index = await this.getInjuryIndex();
+    const key = player.fullName.toLowerCase();
+    const hit = index.get(key);
+    if (!hit) {
+      return {
+        status: "Active",
+        note: "No active injury reported on the ESPN injury report.",
+        source: "ESPN",
+        reportedAt: new Date().toISOString(),
+      };
+    }
+    return hit;
+  }
+
+  private async getInjuryIndex(): Promise<Map<string, InjuryNote>> {
+    const cacheKey = "espn-injury-index";
+    const hit = cacheGet<Array<[string, InjuryNote]>>(cacheKey);
+    if (hit?.value) return new Map(hit.value);
+    const data = await this.fetchJson<EspnInjuriesResponse>(
+      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries",
+    );
+    const map = new Map<string, InjuryNote>();
+    for (const team of data?.injuries ?? []) {
+      for (const inj of team.injuries ?? []) {
+        const name = inj.athlete?.displayName?.toLowerCase();
+        if (!name) continue;
+        map.set(name, {
+          status: normaliseInjuryStatus(inj.status),
+          note: inj.shortComment ?? inj.longComment ?? undefined,
+          source: "ESPN",
+          reportedAt: inj.date,
+        });
+      }
+    }
+    cacheSet(cacheKey, Array.from(map.entries()), 30 * 60 * 1000);
+    return map;
   }
 
   async getNewsItems(playerId: string): Promise<PlayerNewsItem[]> {

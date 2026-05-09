@@ -197,6 +197,17 @@ A SQLite-backed Prisma cache is scaffolded in [`prisma/schema.prisma`](prisma/sc
 
 ---
 
+## Pages
+
+| Path | Purpose |
+|---|---|
+| `/` | Dashboard with hero search + featured players + recent projections |
+| `/players` | Player search results |
+| `/players/:id` | Full profile: header, projection, analysis, **track record**, season averages, recent form, charts, game log, career, status |
+| `/scoreboard` | Today's NBA games (live score + status from ESPN) |
+| `/compare?ids=a,b,c` | Side-by-side comparison of up to 3 players |
+| `/accuracy` | Model track record across all graded predictions |
+
 ## API
 
 | Method | Path | Purpose |
@@ -204,7 +215,20 @@ A SQLite-backed Prisma cache is scaffolded in [`prisma/schema.prisma`](prisma/sc
 | GET | `/api/search?q=` | Search players (debounced on the client, cached server-side) |
 | GET | `/api/players/:id` | Full profile + logs + averages + context + cache ages |
 | GET | `/api/players/:id/projection` | Advanced projection: expected/floor/ceiling/confidence/risk + factors + stat explanations |
+| GET | `/api/accuracy` | Aggregated prediction accuracy stats |
 | GET | `/api/status` | Provider mode, API key configuration, model version, cache stats |
+
+## Watchlist
+
+Tap the ★ button on any player profile. Watched players are stored in your browser (`localStorage`) and listed in the sidebar — no account needed, persists across sessions.
+
+## Prediction tracking & accuracy
+
+Every time you load a player profile, CourtSight records that projection (player, target date, expected statline, confidence). On your next visit it checks ESPN for the real game, grades the prediction, and updates the `/accuracy` page and the player's track record card.
+
+Storage is a JSON file at `data/predictions.json`. On read-only filesystems (e.g. some serverless environments) it transparently falls back to in-memory only and the `/accuracy` page surfaces a warning chip.
+
+Tolerance per stat: PTS ±4, REB ±2, AST ±2, STL ±1, BLK ±1, TO ±1.5, MIN ±4. A prediction is a "hit" when PTS, REB, and AST are all within tolerance.
 
 ---
 

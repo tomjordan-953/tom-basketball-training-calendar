@@ -3,10 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
+import { WatchlistPanel } from "./WatchlistPanel";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: "◎" },
   { href: "/players", label: "Players", icon: "◍" },
+  { href: "/scoreboard", label: "Today's games", icon: "▦" },
+  { href: "/compare", label: "Compare", icon: "⇄" },
+  { href: "/accuracy", label: "Accuracy", icon: "◉" },
 ];
 
 export function Sidebar() {
@@ -21,12 +25,12 @@ export function Sidebar() {
           <div className="leading-tight">
             <p className="text-sm font-semibold text-white">CourtSight</p>
             <p className="text-[10px] uppercase tracking-widest text-white/40">
-              AI Analytics
+              AI Analytics · v2.2
             </p>
           </div>
         </Link>
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="px-3 py-4 space-y-1">
         {NAV.map((item) => {
           const active =
             item.href === "/"
@@ -49,6 +53,12 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <div className="px-5 pt-2 pb-1 text-[10px] uppercase tracking-widest text-white/30 border-t border-white/5">
+        Watchlist
+      </div>
+      <div className="flex-1 overflow-y-auto pb-3">
+        <WatchlistPanel />
+      </div>
       <div className="px-5 py-4 border-t border-white/5 text-[11px] text-white/40 leading-relaxed">
         Analysis & projections only.
         <br />

@@ -14,6 +14,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { getProvider } from "@/lib/data/providers";
 import { buildProjection } from "@/lib/prediction/projectionEngine";
 import { TTL, cachedWithMeta } from "@/lib/data/cache";
+import { TrackRecordCard } from "@/components/tracking/TrackRecordCard";
+import { listForPlayer, recordPrediction } from "@/lib/tracking/store";
+import { gradePlayerPredictions } from "@/lib/tracking/grader";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +90,25 @@ export default async function PlayerProfilePage({ params }: Props) {
       })
     : null;
 
+  // Record this projection (best-effort) and lazily grade any past predictions
+  // for this player against the latest gamelogs.
+  if (projection) {
+    await recordPrediction({
+      id: `${projection.playerId}:${projection.generatedAt}`,
+      playerId: projection.playerId,
+      playerName: projection.playerName,
+      modelVersion: projection.modelVersion,
+      dataSource: projection.dataSource,
+      generatedAt: projection.generatedAt,
+      targetDate: nextGame?.date,
+      opponent: projection.opponent,
+      predicted: projection.projected,
+      confidence: projection.confidence,
+    });
+  }
+  await gradePlayerPredictions(player.id, logs);
+  const trackRecords = await listForPlayer(player.id);
+
   return (
     <div className="space-y-6 animate-fade-up">
       <PlayerHeader
@@ -106,6 +128,7 @@ export default async function PlayerProfilePage({ params }: Props) {
             />
           )}
           {projection && <ProjectionAnalysis projection={projection} />}
+          <TrackRecordCard records={trackRecords} />
           <PlayerProfileCard season={season} />
           <RecentFormCard logs={logs} season={season} />
           <RecentStatsChart logs={logs} />

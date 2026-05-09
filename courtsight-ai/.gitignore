@@ -10,3 +10,5 @@ dist/
 next-env.d.ts
 .DS_Store
 prisma/dev.db*
+data/predictions.json
+data/nba-api-cache/

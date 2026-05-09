@@ -9,8 +9,8 @@ export async function GET() {
   const provider = getProvider();
   return NextResponse.json({
     app: process.env.NEXT_PUBLIC_APP_NAME ?? "CourtSight AI",
-    version: "2.0",
-    versionTag: "v2.0 Real Data Intelligence",
+    version: "2.2",
+    versionTag: "v2.2 Tracking + Tools",
     model: MODEL_VERSION,
     provider: {
       name: provider.name,

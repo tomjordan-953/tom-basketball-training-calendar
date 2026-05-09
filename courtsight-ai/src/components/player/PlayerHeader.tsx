@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
 import { formatCacheAge } from "@/lib/data/cache";
+import { WatchlistButton } from "@/components/player/WatchlistButton";
 import type { Player } from "@/types/player";
 
 export function PlayerHeader({
@@ -52,7 +53,8 @@ export function PlayerHeader({
             </p>
           </div>
         </div>
-        <div className="md:ml-auto flex flex-wrap gap-2 text-xs text-white/60">
+        <div className="md:ml-auto flex flex-wrap items-center gap-2 text-xs text-white/60">
+          <WatchlistButton player={player} />
           {player.height && (
             <Stat label="Height" value={player.height} />
           )}
