@@ -1,0 +1,17 @@
+{
+  "name": "Tom Basketball",
+  "short_name": "Tom Hoops",
+  "description": "Smart time-based basketball training assistant for Tom.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f8fb",
+  "theme_color": "#0b63ce",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
