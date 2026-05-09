@@ -34,7 +34,7 @@ export default async function PlayerProfilePage({ params }: Props) {
     () => provider.getPlayer(playerId),
   );
   if (!playerRead.value) notFound();
-  const player = playerRead.value;
+  let player = playerRead.value;
 
   const [logsRead, seasonRead, careerRead, nextGameRead, injuryRead, newsRead] =
     await Promise.all([
@@ -69,6 +69,12 @@ export default async function PlayerProfilePage({ params }: Props) {
     ? await provider.getOpponentContext(nextGame.opponent)
     : null;
 
+  // Re-read player to pick up team backfill that getPlayerGameLogs writes back
+  // into the cache. Without this the header can flash "Free agent" for ESPN
+  // search-warmed entries that didn't include a team field.
+  const refreshed = await provider.getPlayer(playerId);
+  if (refreshed) player = refreshed;
+
   const oldestAge = Math.max(
     playerRead.meta.ageMs,
     logsRead.meta.ageMs,
@@ -90,10 +96,11 @@ export default async function PlayerProfilePage({ params }: Props) {
       })
     : null;
 
-  // Record this projection (best-effort) and lazily grade any past predictions
-  // for this player against the latest gamelogs.
+  // Read existing track record now (fast, just file read); record + grade
+  // happen in the background so they don't block the page render.
+  const trackRecords = await listForPlayer(player.id);
   if (projection) {
-    await recordPrediction({
+    void recordPrediction({
       id: `${projection.playerId}:${projection.generatedAt}`,
       playerId: projection.playerId,
       playerName: projection.playerName,
@@ -104,10 +111,8 @@ export default async function PlayerProfilePage({ params }: Props) {
       opponent: projection.opponent,
       predicted: projection.projected,
       confidence: projection.confidence,
-    });
+    }).then(() => gradePlayerPredictions(player.id, logs));
   }
-  await gradePlayerPredictions(player.id, logs);
-  const trackRecords = await listForPlayer(player.id);
 
   return (
     <div className="space-y-6 animate-fade-up">

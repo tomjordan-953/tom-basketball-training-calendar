@@ -3,6 +3,8 @@ import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { PlayerAvatar } from "@/components/ui/PlayerAvatar";
+import { TeamLogo } from "@/components/ui/TeamLogo";
 import { getProvider } from "@/lib/data/providers";
 import { PlayerSearch } from "@/components/search/PlayerSearch";
 import { FEATURED_DEMO_IDS } from "@/lib/data/providers/demoProvider";
@@ -71,28 +73,31 @@ export default async function PlayersPage({
               className="group"
             >
               <Card className="h-full transition group-hover:border-white/15 group-hover:translate-y-[-2px]">
-                <CardHeader
-                  title={p.fullName}
-                  subtitle={[
-                    p.team,
-                    p.position,
-                    p.height ? `${p.height}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  right={
-                    p.teamAbbreviation ? (
-                      <Badge tone="purple">{p.teamAbbreviation}</Badge>
-                    ) : undefined
-                  }
-                />
-                <CardBody className="text-xs text-white/50 flex items-center justify-between">
-                  <span>
-                    {FEATURED_DEMO_IDS.includes(p.id) ? "Featured" : "Tap to open profile"}
-                  </span>
-                  <span className="text-accent-cyan group-hover:translate-x-0.5 transition">
-                    Open →
-                  </span>
+                <CardBody>
+                  <div className="flex items-center gap-4">
+                    <PlayerAvatar src={p.imageUrl} name={p.fullName} size="lg" ring />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-base font-semibold text-white truncate">
+                          {p.fullName}
+                        </p>
+                        {p.teamAbbreviation && (
+                          <TeamLogo abbreviation={p.teamAbbreviation} size="sm" />
+                        )}
+                      </div>
+                      <p className="text-xs text-white/50 mt-0.5 truncate">
+                        {[p.team, p.position, p.height].filter(Boolean).join(" · ")}
+                      </p>
+                      <div className="mt-2 flex items-center justify-between text-[11px]">
+                        <span className="text-white/40">
+                          {FEATURED_DEMO_IDS.includes(p.id) ? "Featured" : "Open profile"}
+                        </span>
+                        <span className="text-accent-cyan group-hover:translate-x-0.5 transition">
+                          →
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </CardBody>
               </Card>
             </Link>

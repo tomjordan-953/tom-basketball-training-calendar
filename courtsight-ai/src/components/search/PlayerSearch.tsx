@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Player } from "@/types/player";
 import { cn } from "@/lib/utils/cn";
+import { PlayerAvatar } from "@/components/ui/PlayerAvatar";
+import { TeamLogo } from "@/components/ui/TeamLogo";
 
 export function PlayerSearch({
   initialQuery = "",
@@ -100,14 +102,15 @@ export function PlayerSearch({
               key={p.id}
               href={`/players/${encodeURIComponent(p.id)}`}
               className={cn(
-                "flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/[0.05] border-b border-white/5 last:border-0",
+                "flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/[0.05] border-b border-white/5 last:border-0",
               )}
               onClick={() => setOpen(false)}
             >
-              <span className="text-white">{p.fullName}</span>
-              <span className="text-xs text-white/40">
-                {p.teamAbbreviation ?? "—"}
-                {p.position ? ` · ${p.position}` : ""}
+              <PlayerAvatar src={p.imageUrl} name={p.fullName} size="sm" />
+              <span className="flex-1 text-white truncate">{p.fullName}</span>
+              {p.teamAbbreviation && <TeamLogo abbreviation={p.teamAbbreviation} size="sm" />}
+              <span className="text-xs text-white/40 min-w-[2rem] text-right">
+                {p.position ?? ""}
               </span>
             </Link>
           ))}

@@ -66,10 +66,20 @@ function findActualGame(
   );
 }
 
+// Throttle background grading so refreshing a profile in quick succession
+// doesn't re-do the same work.
+const lastGrade = new Map<string, number>();
+const GRADE_COOLDOWN_MS = 30 * 60 * 1000;
+
 export async function gradePlayerPredictions(
   playerId: string,
   recentLogs: GameLog[],
 ): Promise<{ graded: number; pending: number }> {
+  const last = lastGrade.get(playerId) ?? 0;
+  if (Date.now() - last < GRADE_COOLDOWN_MS) {
+    return { graded: 0, pending: 0 };
+  }
+  lastGrade.set(playerId, Date.now());
   const records = await listForPlayer(playerId);
   const ungraded = records.filter((r) => !r.actual);
   let graded = 0;

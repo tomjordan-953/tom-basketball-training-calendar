@@ -3,6 +3,8 @@ import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PlayerAvatar } from "@/components/ui/PlayerAvatar";
+import { TeamLogo } from "@/components/ui/TeamLogo";
 import { getProvider } from "@/lib/data/providers";
 import { buildProjection } from "@/lib/prediction/projectionEngine";
 import { fmtStat } from "@/lib/utils/format";
@@ -80,14 +82,17 @@ export default async function ComparePage({ searchParams }: Props) {
                       <th key={c.player.id} className="text-right font-medium px-3 py-2">
                         <Link
                           href={`/players/${encodeURIComponent(c.player.id)}`}
-                          className="text-accent-cyan hover:underline"
+                          className="inline-flex items-center justify-end gap-2"
                         >
-                          {c.player.fullName}
+                          <span>
+                            <span className="block text-accent-cyan hover:underline">{c.player.fullName}</span>
+                            <span className="block text-[10px] text-white/40 normal-case tracking-normal">
+                              {c.player.teamAbbreviation ?? "—"}
+                              {c.player.position ? ` · ${c.player.position}` : ""}
+                            </span>
+                          </span>
+                          <PlayerAvatar src={c.player.imageUrl} name={c.player.fullName} size="md" />
                         </Link>
-                        <div className="text-[10px] text-white/40 normal-case tracking-normal">
-                          {c.player.teamAbbreviation ?? "—"}
-                          {c.player.position ? ` · ${c.player.position}` : ""}
-                        </div>
                       </th>
                     ))}
                   </tr>

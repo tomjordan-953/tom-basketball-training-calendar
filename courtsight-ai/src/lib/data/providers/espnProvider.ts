@@ -204,39 +204,47 @@ class EspnProvider implements SportsDataProvider {
 
   async getPlayer(playerId: string): Promise<Player | null> {
     const cached = cacheGet<Player>(`player:espn:${playerId}`);
-    if (cached?.value) {
-      // If we only have minimal info from search, enrich with bio.
-      if (!cached.value.height) {
-        const enriched = await this.enrichBio(playerId, cached.value);
-        if (enriched) {
-          cacheSet(`player:espn:${playerId}`, enriched, TTL.player);
-          return enriched;
-        }
+    let player: Player | null = cached?.value ?? null;
+
+    if (!player) {
+      const numericId = playerId.replace(/^espn-/, "");
+      const bio = await this.fetchJson<CoreAthlete>(
+        `${CORE}/v2/sports/basketball/leagues/nba/athletes/${numericId}`,
+      );
+      if (!bio) return null;
+      const fullName = bio.fullName ?? bio.displayName ?? "";
+      const [first, ...rest] = fullName.split(" ");
+      player = {
+        id: playerId,
+        firstName: bio.firstName ?? first,
+        lastName: bio.lastName ?? rest.join(" "),
+        fullName,
+        position: bio.position?.abbreviation,
+        height: bio.displayHeight,
+        weight: bio.displayWeight?.replace(" lbs", ""),
+        jersey: bio.jersey,
+        country: bio.birthPlace?.country,
+        draftYear: bio.draft?.year,
+        experienceYears: bio.experience?.years,
+        imageUrl: bio.headshot?.href,
+      };
+      cacheSet(`player:espn:${playerId}`, player, TTL.player);
+    } else if (!player.height) {
+      // Cached player came from search — enrich with bio (height/weight/etc).
+      const enriched = await this.enrichBio(playerId, player);
+      if (enriched) {
+        cacheSet(`player:espn:${playerId}`, enriched, TTL.player);
+        player = enriched;
       }
-      return cached.value;
     }
-    const numericId = playerId.replace(/^espn-/, "");
-    const bio = await this.fetchJson<CoreAthlete>(
-      `${CORE}/v2/sports/basketball/leagues/nba/athletes/${numericId}`,
-    );
-    if (!bio) return null;
-    const fullName = bio.fullName ?? bio.displayName ?? "";
-    const [first, ...rest] = fullName.split(" ");
-    const player: Player = {
-      id: playerId,
-      firstName: bio.firstName ?? first,
-      lastName: bio.lastName ?? rest.join(" "),
-      fullName,
-      position: bio.position?.abbreviation,
-      height: bio.displayHeight,
-      weight: bio.displayWeight?.replace(" lbs", ""),
-      jersey: bio.jersey,
-      country: bio.birthPlace?.country,
-      draftYear: bio.draft?.year,
-      experienceYears: bio.experience?.years,
-      imageUrl: bio.headshot?.href,
-    };
-    cacheSet(`player:espn:${playerId}`, player, TTL.player);
+
+    // Backfill team from the gamelog if it's still missing — search results
+    // and the bio endpoint don't expose a usable team string.
+    if (player && !player.teamAbbreviation) {
+      await this.getPlayerGameLogs(playerId, 3);
+      const post = cacheGet<Player>(`player:espn:${playerId}`);
+      if (post?.value) player = post.value;
+    }
     return player;
   }
 
