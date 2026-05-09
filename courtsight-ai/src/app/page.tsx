@@ -21,7 +21,9 @@ export default async function Home() {
     provider.name === "demo"
       ? FEATURED_DEMO_IDS
       : await cached(`featured:${provider.name}`, TTL.search, async () => {
-          const popular = ["Shai Gilgeous-Alexander", "Jokic", "Doncic", "Tatum"];
+          // balldontlie's `search` only matches a single name field at a time,
+          // so use single-token names here.
+          const popular = ["Gilgeous-Alexander", "Jokic", "Doncic", "Tatum"];
           const ids: string[] = [];
           for (const name of popular) {
             const results = await provider.searchPlayers(name);
