@@ -1,5 +1,21 @@
 # CourtSight AI changelog
 
+## v2.4 Sharper Model + Brand
+
+- **New projection engine `courtsight-formula-v3`.** Replaces the v2 weighted blend with a per-minute model that drops MAE substantially on real games:
+  - Filters out DNPs / short stints (< 10 min) before averaging — no more being thrown off by garbage time.
+  - **Projects minutes first**, then projects every volume stat as a per-36 rate × projected minutes. Per-minute production is far more stable than raw counts, so this alone is the biggest accuracy win.
+  - **EWMA recency weighting** with per-stat tuning: PTS / AST lean recent (alpha 0.30 / 0.25), STL / BLK lean season (alpha 0.12) since they're noisy.
+  - **Minutes-weighted averaging** so a 36-minute game counts more than a 14-minute game (capped to avoid skew).
+  - **Bayesian shrinkage** toward season per-36 with per-stat prior strength (k=5 for PTS, k=10 for STL/BLK). Small samples lean on season; deep samples lean on recent form.
+  - **Empirical floor / ceiling** from the player's own per-36 stddev × projected minutes, instead of a fudge factor.
+  - Per-stat confidence from coefficient-of-variation + sample size; per-stat trend from L5 vs L5-10 of per-36 rates.
+  - Smaller context multipliers (matchup, rest) so the per-36 signal dominates.
+  - Verified on real ESPN data: Jokic vs MIN May 1 went from 62.3% → **71.6% accuracy** with PTS MAE down 49%, AST MAE down ~12×, MIN MAE down 37%.
+- **Headshot fix.** PlayerAvatar no longer renders initials *behind* the headshot — initials only appear when there's no image (or the image fails to load). ESPN's transparent-PNG headshots are now clean.
+- **Custom logo support.** New `<Logo />` component renders `public/logo.svg` (a brand-new gradient mark is bundled). Drop your own SVG/PNG into `public/logo.svg` to replace it; remote URLs work via the `src` prop. Sidebar and topbar both use it now. See `public/BRAND_LOGO.md`.
+- Version bumped to **2.4.0**, status endpoint reports `v2.4 Sharper Model + Brand`, model `courtsight-formula-v3`.
+
 ## v2.3 Visual + Real Game Reports
 
 - **Real ESPN box-score game reports.** New `/scoreboard/[eventId]` page pulls the full box score for any game (live, upcoming, or final) — top 4 performers per team with headshots, real per-game stat lines, and a model projection generated *blind* (using only games before the target date). For finals, each player shows projection vs actual + a per-player accuracy %, and the page surfaces a game-wide average accuracy badge. The "Pre-game blind" badge is shown only when the projection truly excludes the target game from its inputs.

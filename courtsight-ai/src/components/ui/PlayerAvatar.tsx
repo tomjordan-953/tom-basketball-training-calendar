@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 import { cn } from "@/lib/utils/cn";
 
 const SIZE_PX: Record<NonNullable<PlayerAvatarProps["size"]>, number> = {
@@ -25,6 +28,8 @@ export function PlayerAvatar({
   ring,
 }: PlayerAvatarProps) {
   const dim = SIZE_PX[size];
+  const [errored, setErrored] = useState(false);
+  const showImage = !!src && !errored;
   const initials =
     name
       .split(" ")
@@ -42,20 +47,23 @@ export function PlayerAvatar({
       )}
       style={{ width: dim, height: dim }}
     >
-      <span
-        className="absolute inset-0 grid place-items-center select-none"
-        style={{ fontSize: Math.max(10, dim * 0.36) }}
-        aria-hidden
-      >
-        {initials}
-      </span>
-      {src && (
+      {!showImage && (
+        <span
+          className="select-none"
+          style={{ fontSize: Math.max(10, dim * 0.36) }}
+          aria-hidden
+        >
+          {initials}
+        </span>
+      )}
+      {showImage && (
         <Image
-          src={src}
+          src={src!}
           alt={name}
           width={dim}
           height={dim}
-          className="relative z-10 object-cover"
+          className="absolute inset-0 h-full w-full object-cover object-top"
+          onError={() => setErrored(true)}
           unoptimized
         />
       )}
