@@ -66,5 +66,5 @@ export interface Projection {
   formIndex: number; // 0-100 all-around composite vs season baseline
   generatedAt: string;
   modelVersion: string;
-  dataSource: "demo" | "balldontlie";
+  dataSource: "demo" | "balldontlie" | "espn";
 }

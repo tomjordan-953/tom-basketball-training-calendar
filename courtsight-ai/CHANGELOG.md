@@ -1,5 +1,13 @@
 # CourtSight AI changelog
 
+## v2.1 ESPN provider
+
+- Added `espnProvider` using ESPN's public NBA endpoints — real player search, profiles, season averages, recent game logs, news, and next-game info. **No API key required.**
+- ESPN is now the default for `DATA_PROVIDER=auto`.
+- balldontlie remains available via `DATA_PROVIDER=balldontlie`. Its free-tier limits trigger an automatic demo simulation for stats it can't serve.
+- Added `DATA_PROVIDER=espn` mode.
+- Player header now shows "Real data · ESPN" when ESPN is the source.
+
 ## v2.0 Real Data Intelligence
 
 - Added real NBA data provider mode (`balldontlie`) selected via `DATA_PROVIDER=auto|demo|balldontlie` and `BALLDONTLIE_API_KEY`.

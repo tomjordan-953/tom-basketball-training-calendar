@@ -7,8 +7,8 @@ import type {
   CareerSeason,
 } from "@/types/stats";
 
-export type ProviderName = "demo" | "balldontlie";
-export type ProviderMode = "auto" | "demo" | "balldontlie";
+export type ProviderName = "demo" | "balldontlie" | "espn";
+export type ProviderMode = "auto" | "demo" | "balldontlie" | "espn";
 
 export interface ProviderStatus {
   name: ProviderName;

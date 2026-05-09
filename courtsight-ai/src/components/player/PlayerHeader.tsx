@@ -8,7 +8,7 @@ export function PlayerHeader({
   freshnessAgeMs,
 }: {
   player: Player;
-  dataSource: "demo" | "balldontlie";
+  dataSource: "demo" | "balldontlie" | "espn";
   freshnessAgeMs?: number;
 }) {
   const initials = `${player.firstName[0] ?? ""}${player.lastName[0] ?? ""}`;
@@ -28,6 +28,10 @@ export function PlayerHeader({
               {dataSource === "demo" ? (
                 <Badge tone="info" dot>
                   Demo data
+                </Badge>
+              ) : dataSource === "espn" ? (
+                <Badge tone="positive" dot>
+                  Real data · ESPN
                 </Badge>
               ) : (
                 <Badge tone="positive" dot>

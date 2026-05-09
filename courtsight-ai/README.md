@@ -110,16 +110,18 @@ interface SportsDataProvider {
 }
 ```
 
-v2 ships two providers:
+v2 ships three providers:
+- **`espnProvider`** — *default in `auto` mode*. Uses ESPN's public NBA endpoints (`site.web.api.espn.com`, `sports.core.api.espn.com`) for **real** player search, profiles, season averages, recent game logs, news, and next-game info. **No API key required.** Server-side fetch only.
+- **`balldontlieProvider`** — calls balldontlie when `BALLDONTLIE_API_KEY` is set and `DATA_PROVIDER=balldontlie`. The free tier authorises only player search/profile, so live game logs and season averages fall back to demo simulation by name match (clearly labelled `(free tier)` in the UI).
 - **`demoProvider`** — bundled, deterministic sample data for ~10 players. Game logs (24 games each), season averages, opponent context, an "injury" stub and "news" notes are all clearly labelled **Demo data**.
-- **`balldontlieProvider`** — calls balldontlie when `BALLDONTLIE_API_KEY` is set. Endpoints not exposed by balldontlie (career aggregates, injuries, news, schedule) gracefully return `null` and the UI surfaces "Data unavailable" — never invented.
 
 Future providers (SportsDataIO, NBA.com via the optional `scripts/ingest-nba-api.py`) just implement the same interface.
 
 `DATA_PROVIDER` controls selection:
-- `auto` (default) — use balldontlie if a key is set, else demo.
+- `auto` (default) — use ESPN. No API key needed.
+- `espn` — explicitly use ESPN.
+- `balldontlie` — use balldontlie (requires `BALLDONTLIE_API_KEY`; free tier blocks live stats).
 - `demo` — force bundled sample data.
-- `balldontlie` — force live mode; falls back to Demo with a clear reason if the key is missing.
 
 ---
 

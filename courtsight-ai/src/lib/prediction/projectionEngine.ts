@@ -37,7 +37,7 @@ interface BuildArgs {
   nextGame: NextGameContext | null;
   opponent: OpponentContext | null;
   injury: InjuryNote | null;
-  dataSource: "demo" | "balldontlie";
+  dataSource: "demo" | "balldontlie" | "espn";
   freshnessAgeMs?: number;
 }
 
@@ -269,7 +269,7 @@ function computeDataQuality(args: {
   nextGame: NextGameContext | null;
   opponent: OpponentContext | null;
   injury: InjuryNote | null;
-  dataSource: "demo" | "balldontlie";
+  dataSource: "demo" | "balldontlie" | "espn";
   freshnessAgeMs?: number;
 }): DataQuality {
   const notes: string[] = [];
