@@ -10,6 +10,7 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: "◎" },
   { href: "/players", label: "Players", icon: "◍" },
   { href: "/scoreboard", label: "Today's games", icon: "▦" },
+  { href: "/predictions", label: "Predictions", icon: "✦" },
   { href: "/compare", label: "Compare", icon: "⇄" },
   { href: "/accuracy", label: "Accuracy", icon: "◉" },
 ];
@@ -24,7 +25,7 @@ export function Sidebar() {
           <div className="leading-tight">
             <p className="text-sm font-semibold text-white">CourtSight</p>
             <p className="text-[10px] uppercase tracking-widest text-white/40">
-              AI Analytics · v2.7
+              AI Analytics · v2.8
             </p>
           </div>
         </Link>

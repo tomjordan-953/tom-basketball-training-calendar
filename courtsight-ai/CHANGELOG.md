@@ -1,5 +1,27 @@
 # CourtSight AI changelog
 
+## v2.8 Season Predictions
+
+New `/predictions` page that ranks **championship contenders, predicts the Finals matchup, and ranks MVP / ROY / stat-leaders** — all from real ESPN feeds, all with reasoning, all updates when injuries or standings change.
+
+- **`lib/data/standings.ts`** — fetch ESPN standings (conference, seed, W-L, point differential, win %, avg pts for/against per team).
+- **`lib/data/leagueLeaders.ts`** — fetch ESPN league leaders for 12 stat categories (PTS/REB/AST/STL/BLK/PER/etc).
+- **`lib/predictions/championship.ts`** — scores every playoff team on net margin × win % × seed, then deducts a major penalty when their top scorer is on the live ESPN injury report. Returns ranked list, predicted Finals matchup (top East vs top West), champion pick, and an "upset watch" of low-seeded teams scoring high.
+- **`lib/predictions/awards.ts`** —
+  - **MVP**: top-12 PPG candidates blended with REB/AST/PER + heavily weighted team win %, minus injury penalty. Returns top 5 with reasoning.
+  - **ROY**: top-30 PPG pool filtered to players whose ESPN bio shows draft year ≥ current season's start. Production-weighted (team success matters less than for MVP). Returns top 5 with reasoning.
+- **`/predictions` page** sections:
+  - Pick to win it all (champion + reasoning)
+  - Predicted Finals (East vs West) + upset watch
+  - Full contender ranking table
+  - MVP race (top 5 with headshots, signals, reasoning)
+  - Rookie of the Year
+  - Live regular-season stat leaders (PTS/REB/AST/STL/BLK/PER, top 5 each, linked to player profiles)
+- Sidebar nav adds **Predictions** between Today's games and Compare.
+- Honest "How this works" footer spells out the formula and what updates trigger refreshes.
+
+Verified live: page renders 10 team logos + 10 player headshots, with real current top scorers (Cade Cunningham as PPG leader for 2025-26, Jokic / SGA / Brunson / Banchero / Wemby in MVP pool).
+
 ## v2.7 Vegas Signal + Minutes Safeguard
 
 Three accuracy upgrades. Model bumped to **`courtsight-formula-v3.3`**.
