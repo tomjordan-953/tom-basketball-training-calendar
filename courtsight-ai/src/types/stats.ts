@@ -62,4 +62,5 @@ export interface NextGameContext {
   homeAway: "home" | "away";
   daysOfRest: number;
   isBackToBack: boolean;
+  isPlayoffs?: boolean;
 }

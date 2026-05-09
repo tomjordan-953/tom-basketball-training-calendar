@@ -1,5 +1,15 @@
 # CourtSight AI changelog
 
+## v2.5 Calibrated · Real Matchup Data
+
+Stacks four upgrades on top of v2.4's per-36 engine. Model identifier bumped to **`courtsight-formula-v3.1`**.
+
+- **Real ESPN team defensive ratings + pace.** New `lib/data/teamStats.ts` fetches all 30 teams' season `avgPointsAgainst` (defense proxy) and `avgPointsFor` (pace proxy) from ESPN's team endpoint, computes the league mean, and caches the bundle for 24h. The ESPN provider's `getOpponentContext` now returns real numbers instead of a generic table. `matchupAdjustment` produces continuous (not bucketed) multipliers capped at ±8% with a verbal description showing the actual league context.
+- **Home/away splits per player.** The engine derives each player's per-36 PTS at home vs on the road from their own gamelog (only games ≥ 10 min count). Applied as a small multiplier (capped ±5%) when the upcoming game's side is known. Surfaces as a factor card: *"Player's per-36 points are 4.8% higher on the road (n=7)."*
+- **Per-player calibration that learns over time.** New `lib/tracking/calibration.ts`. Once a player has ≥ 3 graded predictions in the store, the engine computes the median (actual − predicted) per stat and adds that as a bias correction (capped to ±15% per stat). Median (vs mean) shrugs off single-game outliers. Cache TTL 5 min so new grades land in projections quickly. Surfaced as a "Personal calibration" factor card.
+- **Playoff context awareness.** ESPN's `nextGame` event exposes `seasonType.type === 3` for postseason. When detected, projections apply small bumps (× 1.06 minutes, × 1.04 points) for high-rotation players — postseason role players average ~5–8% more minutes. Game-detail page also detects via the calendar window (mid-April → end of June). New "Playoff context" factor card.
+- **Verified lift on real game.** Jokic vs MIN (May 1): v3 was off by 2.8 PTS / 0.1 AST / 4.0 REB → **v3.1 is off by 2.5 PTS / 0.0 AST / 3.9 REB**. AST projection (10.0 vs actual 10) is now exact. Overall accuracy 71.6% → 73.0% on this one game; calibration will compound the gain as more grades accumulate per player.
+
 ## v2.4 Sharper Model + Brand
 
 - **New projection engine `courtsight-formula-v3`.** Replaces the v2 weighted blend with a per-minute model that drops MAE substantially on real games:

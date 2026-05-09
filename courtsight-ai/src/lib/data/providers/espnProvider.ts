@@ -18,6 +18,7 @@ import type {
 import type { ProviderStatus, SportsDataProvider } from "./providerTypes";
 import { createDemoProvider } from "./demoProvider";
 import { TTL, cacheGet, cacheSet } from "@/lib/data/cache";
+import { fetchOpponentTeamStats } from "@/lib/data/teamStats";
 
 const SITE = "https://site.web.api.espn.com";
 const CORE = "https://sports.core.api.espn.com";
@@ -78,6 +79,7 @@ interface NextGameEvent {
   date: string;
   shortName?: string;
   name?: string;
+  seasonType?: { id?: string; type?: number; name?: string };
   competitors?: NextGameCompetitor[];
   competitions?: Array<{ competitors?: NextGameCompetitor[] }>;
 }
@@ -416,19 +418,38 @@ class EspnProvider implements SportsDataProvider {
     }
 
     if (!opponentAbbr) return null;
+    const isPlayoffs =
+      event.seasonType?.type === 3 ||
+      (event.seasonType?.name?.toLowerCase().includes("post") ?? false);
     return {
       date: event.date.slice(0, 10),
       opponent: opponentAbbr,
       homeAway,
       daysOfRest: 1,
       isBackToBack: false,
+      isPlayoffs,
     };
   }
 
   async getOpponentContext(opponent: string): Promise<OpponentContext | null> {
-    // ESPN doesn't expose per-position defensive ratings cheaply. Use the
-    // bundled demo opponent table — neutral for unknowns.
-    return this.fallback.getOpponentContext(opponent);
+    const { team, bundle } = await fetchOpponentTeamStats(opponent);
+    if (!team) {
+      // Fall back to demo table so non-NBA / unknown abbrs still resolve.
+      return this.fallback.getOpponentContext(opponent);
+    }
+    const def = team.avgPointsAgainst;
+    const league = bundle.leagueAvgPointsAgainst;
+    let difficulty: OpponentContext["difficulty"];
+    if (def < league - 3) difficulty = "Tough";
+    else if (def > league + 3) difficulty = "Easy";
+    else difficulty = "Average";
+    return {
+      opponent: team.abbreviation,
+      defensiveRating: def,
+      pointsAllowedToPosition: undefined,
+      pace: team.paceProxy,
+      difficulty,
+    };
   }
 
   async getInjuryContext(playerId: string): Promise<InjuryNote | null> {

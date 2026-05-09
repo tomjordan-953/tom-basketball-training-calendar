@@ -24,7 +24,7 @@ export function Sidebar() {
           <div className="leading-tight">
             <p className="text-sm font-semibold text-white">CourtSight</p>
             <p className="text-[10px] uppercase tracking-widest text-white/40">
-              AI Analytics · v2.4
+              AI Analytics · v2.5
             </p>
           </div>
         </Link>

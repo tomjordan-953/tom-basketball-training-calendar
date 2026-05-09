@@ -10,6 +10,7 @@ import type { GameLog, NextGameContext, OpponentContext, SeasonAverages } from "
 import type { InjuryNote } from "@/types/player";
 import type { Projection } from "@/types/projection";
 import { buildProjection } from "./projectionEngine";
+import { getPlayerCalibration } from "@/lib/tracking/calibration";
 
 interface RetroArgs {
   player: Player;
@@ -20,6 +21,7 @@ interface RetroArgs {
   targetDate: string; // YYYY-MM-DD
   opponentAbbr?: string;
   homeAway?: "home" | "away";
+  isPlayoffs?: boolean;
   dataSource: "demo" | "balldontlie" | "espn";
 }
 
@@ -30,7 +32,7 @@ export interface RetroProjectionResult {
   hindsightSafe: boolean;
 }
 
-export function buildRetroProjection({
+export async function buildRetroProjection({
   player,
   allLogs,
   season,
@@ -39,8 +41,9 @@ export function buildRetroProjection({
   targetDate,
   opponentAbbr,
   homeAway,
+  isPlayoffs,
   dataSource,
-}: RetroArgs): RetroProjectionResult {
+}: RetroArgs): Promise<RetroProjectionResult> {
   // Keep only games strictly BEFORE the target date so the projection isn't
   // contaminated by the very game we're predicting.
   const target = new Date(targetDate).getTime();
@@ -56,8 +59,10 @@ export function buildRetroProjection({
         homeAway: homeAway ?? "home",
         daysOfRest: 1,
         isBackToBack: false,
+        isPlayoffs,
       }
     : null;
+  const calibration = await getPlayerCalibration(player.id);
   const projection = buildProjection({
     player,
     logs: priorLogs.length > 0 ? priorLogs : allLogs,
@@ -66,6 +71,8 @@ export function buildRetroProjection({
     opponent,
     injury,
     dataSource,
+    isPlayoffs,
+    calibration,
   });
   return { projection, hindsightSafe: priorLogs.length > 0 && !usedAll };
 }

@@ -35,8 +35,16 @@ import { average, clamp, round, stddev } from "@/lib/utils/format";
 import { matchupAdjustment } from "./matchupAdjustments";
 import { restAdjustment } from "./restAdjustments";
 import { injuryAdjustment } from "./injuryAwareness";
+import { applyCalibration } from "@/lib/tracking/calibration";
 
-export const MODEL_VERSION = "courtsight-formula-v3";
+export const MODEL_VERSION = "courtsight-formula-v3.1";
+
+// Magnitude of the home/away bias correction. Real splits in the NBA are
+// ~3% on PTS — capped here to avoid amplifying noise.
+const HA_BLEND = 0.5;
+// Playoff multipliers — stars play heavier minutes and shoot more.
+const PLAYOFF_MIN_MUL = 1.06;
+const PLAYOFF_PTS_MUL = 1.04;
 
 type StatKey =
   | "points"
@@ -85,6 +93,9 @@ interface BuildArgs {
   injury: InjuryNote | null;
   dataSource: "demo" | "balldontlie" | "espn";
   freshnessAgeMs?: number;
+  // v3.1 additions — all optional so callers can opt in incrementally.
+  isPlayoffs?: boolean;
+  calibration?: import("@/lib/tracking/calibration").PlayerCalibration | null;
 }
 
 // ---------- helpers ---------------------------------------------------------
@@ -231,6 +242,33 @@ function projectStat(
     sampleSize: per36s.length,
     cv,
   };
+}
+
+// Compute the player's own home/away delta from their recent valid games.
+// Returns the multiplicative adjustment to apply to per-36 PTS for the
+// next game's home/away side. Capped to ±5% so a small sample can't move
+// the projection too far.
+function homeAwayPointsMultiplier(
+  recent: GameLog[],
+  upcoming: NextGameContext | null,
+): { mul: number; sample: number; description: string | null } {
+  if (!upcoming) return { mul: 1, sample: 0, description: null };
+  const home = recent.filter((g) => g.homeAway === "home" && g.minutes >= MIN_VALID_MINUTES);
+  const away = recent.filter((g) => g.homeAway === "away" && g.minutes >= MIN_VALID_MINUTES);
+  if (home.length < 3 || away.length < 3) return { mul: 1, sample: 0, description: null };
+  const homePer36 = average(home.map((g) => per36(g.points, g.minutes)));
+  const awayPer36 = average(away.map((g) => per36(g.points, g.minutes)));
+  if (homePer36 <= 0 || awayPer36 <= 0) return { mul: 1, sample: 0, description: null };
+  const overallPer36 = (homePer36 * home.length + awayPer36 * away.length) / (home.length + away.length);
+  const sidePer36 = upcoming.homeAway === "home" ? homePer36 : awayPer36;
+  const rawMul = sidePer36 / overallPer36;
+  const blended = 1 + (rawMul - 1) * HA_BLEND;
+  const mul = clamp(blended, 0.95, 1.05);
+  const description =
+    Math.abs(mul - 1) >= 0.012
+      ? `Player's per-36 points are ${(rawMul * 100 - 100).toFixed(1)}% ${rawMul > 1 ? "higher" : "lower"} ${upcoming.homeAway === "home" ? "at home" : "on the road"} (n=${upcoming.homeAway === "home" ? home.length : away.length}).`
+      : null;
+  return { mul, sample: home.length + away.length, description };
 }
 
 function projectMinutes(recent: GameLog[], season: SeasonAverages | null): {
@@ -445,11 +483,29 @@ export function buildProjection(args: BuildArgs): Projection {
   const rest = restAdjustment(nextGame);
   const inj = injuryAdjustment(injury);
 
-  // Smaller magnitudes than v2 so per-36 model dominates.
-  const offenseMul = (1 + (matchup.pointsMultiplier - 1) * 0.7) * rest.multiplier * inj.multiplier;
-  const contextMul = (1 + (matchup.paceMultiplier - 1) * 0.5) * rest.multiplier * inj.multiplier;
+  // Home/away split derived from this player's own gamelog.
+  const ha = homeAwayPointsMultiplier(recent, nextGame);
+
+  // Playoff bumps — only meaningful for high-minute role players.
+  const playoffPtsMul = args.isPlayoffs ? PLAYOFF_PTS_MUL : 1;
+  const playoffMinMul = args.isPlayoffs ? PLAYOFF_MIN_MUL : 1;
+
+  // Smaller magnitudes than v2 so per-36 model dominates. Home/away and
+  // playoffs layer on top.
+  const offenseMul =
+    (1 + (matchup.pointsMultiplier - 1) * 0.7) *
+    rest.multiplier *
+    inj.multiplier *
+    ha.mul *
+    playoffPtsMul;
+  const contextMul =
+    (1 + (matchup.paceMultiplier - 1) * 0.5) *
+    rest.multiplier *
+    inj.multiplier *
+    playoffPtsMul; // pace bump applies to context stats too in playoffs
 
   if (rest.minutesDelta) projMinutes += rest.minutesDelta * 0.6;
+  if (args.isPlayoffs) projMinutes *= playoffMinMul;
   if (inj.multiplier === 0) projMinutes = 0;
   projMinutes = clampStat("minutes", projMinutes);
 
@@ -480,14 +536,29 @@ export function buildProjection(args: BuildArgs): Projection {
     tov.expected = tov.floor = tov.ceiling = 0;
   }
 
+  // Apply learned per-player calibration LAST (so it corrects systematic
+  // bias from everything upstream).
+  const calibratedLine = applyCalibration(
+    {
+      points: pts.expected,
+      rebounds: reb.expected,
+      assists: ast.expected,
+      steals: stl.expected,
+      blocks: blk.expected,
+      turnovers: tov.expected,
+      minutes: projMinutes,
+    },
+    args.calibration ?? null,
+  );
+
   const finalLine: ProjectedStatline = {
-    points: round(pts.expected, 1),
-    rebounds: round(reb.expected, 1),
-    assists: round(ast.expected, 1),
-    steals: round(stl.expected, 1),
-    blocks: round(blk.expected, 1),
-    turnovers: round(tov.expected, 1),
-    minutes: round(projMinutes, 1),
+    points: round(calibratedLine.points, 1),
+    rebounds: round(calibratedLine.rebounds, 1),
+    assists: round(calibratedLine.assists, 1),
+    steals: round(calibratedLine.steals, 1),
+    blocks: round(calibratedLine.blocks, 1),
+    turnovers: round(calibratedLine.turnovers, 1),
+    minutes: round(calibratedLine.minutes, 1),
   };
 
   const baselineSeason: ProjectedStatline = {
@@ -546,6 +617,33 @@ export function buildProjection(args: BuildArgs): Projection {
     ptsResult: ptsR,
     minutesResult: m,
   });
+
+  if (ha.description) {
+    factors.push({
+      label: "Home/away split",
+      group: "form",
+      impact: ha.mul > 1.005 ? "positive" : ha.mul < 0.995 ? "negative" : "neutral",
+      description: ha.description,
+    });
+  }
+  if (args.isPlayoffs) {
+    factors.push({
+      label: "Playoff context",
+      group: "rest",
+      impact: "positive",
+      description: `Postseason game — minutes scaled by ${PLAYOFF_MIN_MUL.toFixed(2)}, points by ${PLAYOFF_PTS_MUL.toFixed(2)} for high-rotation players.`,
+    });
+  }
+  if (args.calibration && args.calibration.appliedCount > 0) {
+    const bias = args.calibration.bias;
+    const ptsBias = bias.points;
+    factors.push({
+      label: "Personal calibration",
+      group: "data",
+      impact: Math.abs(ptsBias) >= 0.6 ? (ptsBias > 0 ? "positive" : "negative") : "neutral",
+      description: `Bias-corrected from ${args.calibration.appliedCount} graded games for this player (PTS shift ${ptsBias >= 0 ? "+" : ""}${ptsBias.toFixed(1)}).`,
+    });
+  }
 
   const riskFlags: string[] = [];
   if (inj.riskFlag) riskFlags.push(inj.riskFlag);

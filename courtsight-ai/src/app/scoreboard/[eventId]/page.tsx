@@ -53,7 +53,7 @@ export default async function GameDetailPage({ params }: Props) {
         provider.getOpponentContext(opponentAbbr),
       ]);
       const targetDate = summary.date.slice(0, 10);
-      const { projection, hindsightSafe } = buildRetroProjection({
+      const { projection, hindsightSafe } = await buildRetroProjection({
         player,
         allLogs: logs,
         season,
@@ -62,6 +62,7 @@ export default async function GameDetailPage({ params }: Props) {
         targetDate,
         opponentAbbr,
         homeAway,
+        isPlayoffs: isPlayoffDate(summary.date),
         dataSource: provider.name,
       });
       // If game is final, compute diffs.
@@ -351,6 +352,17 @@ function Cell({ n, d, suffix }: { n: number; d?: number; suffix: string }) {
       )}
     </span>
   );
+}
+
+function isPlayoffDate(iso: string): boolean {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  // NBA postseason runs roughly mid-April through mid-June.
+  const m = d.getMonth(); // 0-indexed
+  if (m === 3) return d.getDate() >= 15; // April
+  if (m === 4) return true; // May
+  if (m === 5) return d.getDate() <= 30; // June
+  return false;
 }
 
 function topPerformers(team: BoxScoreTeam, n: number): BoxScorePlayer[] {

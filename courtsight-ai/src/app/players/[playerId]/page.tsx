@@ -17,6 +17,7 @@ import { TTL, cachedWithMeta } from "@/lib/data/cache";
 import { TrackRecordCard } from "@/components/tracking/TrackRecordCard";
 import { listForPlayer, recordPrediction } from "@/lib/tracking/store";
 import { gradePlayerPredictions } from "@/lib/tracking/grader";
+import { getPlayerCalibration } from "@/lib/tracking/calibration";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,8 @@ export default async function PlayerProfilePage({ params }: Props) {
     nextGameRead.meta.ageMs,
   );
 
+  const calibration = await getPlayerCalibration(player.id);
+
   const hasEnough = logs.length >= 3;
   const projection = hasEnough
     ? buildProjection({
@@ -93,6 +96,8 @@ export default async function PlayerProfilePage({ params }: Props) {
         injury,
         dataSource: provider.name,
         freshnessAgeMs: oldestAge,
+        isPlayoffs: nextGame?.isPlayoffs,
+        calibration,
       })
     : null;
 
