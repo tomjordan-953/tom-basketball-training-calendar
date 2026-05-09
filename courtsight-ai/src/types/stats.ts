@@ -63,4 +63,5 @@ export interface NextGameContext {
   daysOfRest: number;
   isBackToBack: boolean;
   isPlayoffs?: boolean;
+  eventId?: string;
 }

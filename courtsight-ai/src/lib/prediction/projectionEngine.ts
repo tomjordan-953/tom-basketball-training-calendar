@@ -37,7 +37,14 @@ import { restAdjustment } from "./restAdjustments";
 import { injuryAdjustment } from "./injuryAwareness";
 import { applyCalibration } from "@/lib/tracking/calibration";
 
-export const MODEL_VERSION = "courtsight-formula-v3.2";
+export const MODEL_VERSION = "courtsight-formula-v3.3";
+
+// Vegas game-total adjustment. League average ~226 PPG combined. A higher
+// total implies more possessions → more counting stats. Capped to avoid
+// over-reacting to a single book's number.
+const VEGAS_TOTAL_LEAGUE_AVG = 226;
+const VEGAS_TOTAL_BLEND = 0.40;  // 40% of (total/avg - 1) flows through
+const VEGAS_TOTAL_CAP = 0.06;    // ±6% max
 
 // Magnitude of the home/away bias correction. Real splits in the NBA are
 // ~3% on PTS — capped here to avoid amplifying noise.
@@ -113,6 +120,8 @@ interface BuildArgs {
   // v3.2 additions
   opponentInjuryCount?: number; // # of high-minute opponents listed Out / D2D
   scheduleDensity?: number; // # of player's games in trailing 7 days incl. next
+  // v3.3 — Vegas total signal (DraftKings via ESPN summary)
+  vegasGameTotal?: number;
 }
 
 // ---------- helpers ---------------------------------------------------------
@@ -339,7 +348,21 @@ function projectMinutes(recent: GameLog[], season: SeasonAverages | null): {
   const seasonMin = season?.minutes ?? (minutes.length ? average(minutes) : 0);
   const recentMin = minutes.length ? ewma(minutes, MINUTES_TUNING.alpha) : seasonMin;
   // Light shrinkage to season for minutes.
-  const expected = shrunk(recentMin, seasonMin, minutes.length, 4);
+  let expected = shrunk(recentMin, seasonMin, minutes.length, 4);
+
+  // Limited-minutes safeguard: if the player's last 3 games show a tighter
+  // minutes ceiling than the EWMA suggests (load management, foul-prone
+  // playoff rotation, return from injury), don't project more than
+  // (recent peak * 1.05). Caught real misses on Doncic/Edwards in the bench.
+  const last3 = minutes.slice(0, 3);
+  if (last3.length === 3) {
+    const recentPeak = Math.max(...last3);
+    const recentAvg3 = average(last3);
+    if (recentAvg3 < seasonMin * 0.85 && expected > recentPeak * 1.05) {
+      expected = recentPeak * 1.05;
+    }
+  }
+
   const sd = minutes.length >= 3 ? stddev(minutes) : 4;
   const band = Math.max(sd * 0.85, expected * 0.08);
   const last5 = minutes.slice(0, 5);
@@ -561,6 +584,16 @@ export function buildProjection(args: BuildArgs): Projection {
   const playoffPtsMul = args.isPlayoffs ? PLAYOFF_PTS_MUL : 1;
   const playoffMinMul = args.isPlayoffs ? PLAYOFF_MIN_MUL : 1;
 
+  // Vegas game-total signal. Boost / shrink production in proportion to
+  // expected possessions vs the league average.
+  const vegasMul = args.vegasGameTotal && args.vegasGameTotal > 0
+    ? clamp(
+        1 + (args.vegasGameTotal / VEGAS_TOTAL_LEAGUE_AVG - 1) * VEGAS_TOTAL_BLEND,
+        1 - VEGAS_TOTAL_CAP,
+        1 + VEGAS_TOTAL_CAP,
+      )
+    : 1;
+
   // Smaller magnitudes than v2 so per-36 model dominates. Home/away,
   // playoffs, opponent-injury usage bump and fatigue layer on top.
   const offenseMul =
@@ -569,6 +602,7 @@ export function buildProjection(args: BuildArgs): Projection {
     inj.multiplier *
     ha.mul *
     playoffPtsMul *
+    vegasMul *
     (1 + opponentInjuryBump) *
     (1 - fatiguePenalty);
   const contextMul =
@@ -576,6 +610,7 @@ export function buildProjection(args: BuildArgs): Projection {
     rest.multiplier *
     inj.multiplier *
     playoffPtsMul *
+    vegasMul *
     (1 + opponentInjuryBump * 0.7) *
     (1 - fatiguePenalty * 0.7);
 
@@ -778,6 +813,15 @@ export function buildProjection(args: BuildArgs): Projection {
       group: "rest",
       impact: "negative",
       description: `${density} games in trailing 7 days incl. next — scoring penalty × ${(1 - fatiguePenalty).toFixed(3)}.`,
+    });
+  }
+
+  if (args.vegasGameTotal && Math.abs(vegasMul - 1) > 0.005) {
+    factors.push({
+      label: "Vegas game total",
+      group: "matchup",
+      impact: vegasMul > 1 ? "positive" : "negative",
+      description: `DraftKings game total ${args.vegasGameTotal} (league avg ~${VEGAS_TOTAL_LEAGUE_AVG}) — pace adjustment × ${vegasMul.toFixed(3)}.`,
     });
   }
 

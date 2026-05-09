@@ -22,6 +22,7 @@ import { gradePlayerPredictions } from "@/lib/tracking/grader";
 import { getPlayerCalibration } from "@/lib/tracking/calibration";
 import { getOpponentInjuryCount } from "@/lib/data/opponentInjuries";
 import { computeScheduleDensity } from "@/lib/prediction/projectionEngine";
+import { fetchGameOdds } from "@/lib/data/gameOdds";
 
 export const dynamic = "force-dynamic";
 
@@ -87,9 +88,10 @@ export default async function PlayerProfilePage({ params }: Props) {
     nextGameRead.meta.ageMs,
   );
 
-  const [calibration, oppInj] = await Promise.all([
+  const [calibration, oppInj, vegasOdds] = await Promise.all([
     getPlayerCalibration(player.id),
     nextGame ? getOpponentInjuryCount(nextGame.opponent) : Promise.resolve({ count: 0, players: [] }),
+    nextGame?.eventId ? fetchGameOdds(nextGame.eventId) : Promise.resolve(null),
   ]);
 
   const scheduleDensity = computeScheduleDensity(logs, nextGame?.date);
@@ -109,6 +111,7 @@ export default async function PlayerProfilePage({ params }: Props) {
         calibration,
         opponentInjuryCount: oppInj.count,
         scheduleDensity,
+        vegasGameTotal: vegasOdds?.overUnder,
       })
     : null;
 

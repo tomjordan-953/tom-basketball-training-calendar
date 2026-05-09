@@ -98,7 +98,7 @@ export default async function Home() {
             <Badge tone={status.isLive ? "positive" : "info"} dot>
               {status.label}
             </Badge>
-            <Badge tone="purple">v2.6 · Aggressive Accuracy</Badge>
+            <Badge tone="purple">v2.7 · Vegas Signal</Badge>
             {liveGames.length > 0 && (
               <Badge tone="danger" dot>
                 {liveGames.length} live

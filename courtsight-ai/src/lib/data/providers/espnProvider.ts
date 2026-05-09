@@ -428,6 +428,7 @@ class EspnProvider implements SportsDataProvider {
       daysOfRest: 1,
       isBackToBack: false,
       isPlayoffs,
+      eventId: event.id,
     };
   }
 

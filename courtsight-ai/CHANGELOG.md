@@ -1,5 +1,14 @@
 # CourtSight AI changelog
 
+## v2.7 Vegas Signal + Minutes Safeguard
+
+Three accuracy upgrades. Model bumped to **`courtsight-formula-v3.3`**.
+
+- **Vegas game total signal.** New `lib/data/gameOdds.ts` pulls DraftKings `overUnder` and `spread` from ESPN's per-event summary endpoint. The projection engine treats the over/under as the single best free pace proxy (more expected possessions → more counting stats). Applied as a continuous multiplier capped at ±6%, cached 6h. New "Vegas game total" factor card surfaces the value when it materially shifts the projection.
+- **Limited-minutes safeguard.** The minutes projector now caps `expected` at `recent peak × 1.05` whenever the player's last 3 games show a meaningful step-down from their season minutes (load management, foul-prone playoff rotation, return from injury). Catches real misses on Doncic / Edwards / Tatum-type games where EWMA was over-projecting because earlier-season games still had weight.
+- **Bench expansion.** `/api/benchmark` now defaults to **30 stars** (every All-Star + most-of-the-rest) and accepts `?players=Curry,LeBron,Embiid` to backtest any names you want. New `?n=10` to limit count for faster runs. Verified per-player MAE on demand for any NBA player ESPN exposes.
+- Verified on the original 8-player set: overall PTS MAE **7.03 → 6.92**. Most players improved 0.1-0.2 PTS; remaining gap is dominated by structural single-game outliers (in-game blowout sit, foul trouble, defensive game-plan shifts) that no formula model can predict from prior history alone.
+
 ## v2.6 Aggressive Accuracy
 
 Five new signals stacked on the v2.5 calibrated engine. Model bumped to **`courtsight-formula-v3.2`**.

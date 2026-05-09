@@ -11,19 +11,21 @@ import { NextResponse } from "next/server";
 import { getProvider } from "@/lib/data/providers";
 import { buildRetroProjection } from "@/lib/prediction/retroProjection";
 import { round } from "@/lib/utils/format";
+import { fetchGameOdds } from "@/lib/data/gameOdds";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const PLAYER_QUERIES = [
-  "Gilgeous-Alexander",
-  "Jokic",
-  "Doncic",
-  "Tatum",
-  "Antetokounmpo",
-  "Edwards",
-  "Wembanyama",
-  "Booker",
+const DEFAULT_PLAYER_QUERIES = [
+  // Top scorers / MVP-tier
+  "Gilgeous-Alexander", "Jokic", "Doncic", "Tatum", "Antetokounmpo",
+  "Edwards", "Wembanyama", "Booker", "Curry", "James",
+  // High-usage stars
+  "Durant", "Embiid", "Brunson", "Mitchell", "Halliburton",
+  "Maxey", "Sabonis", "Ant-Edwards", "Brown", "Harden",
+  // Other notable
+  "Lillard", "Williamson", "Morant", "Banchero", "Towns",
+  "Holmgren", "Fox", "LaVine", "Murray", "Davis",
 ];
 
 const STATS = ["points", "rebounds", "assists", "steals", "blocks", "turnovers", "minutes"] as const;
@@ -91,12 +93,13 @@ async function benchmarkPlayer(query: string): Promise<PlayerBench> {
 
   const predictions: SinglePrediction[] = [];
   for (const target of testGames) {
-    const opp = target.opponent
-      ? await provider.getOpponentContext(target.opponent)
-      : null;
-    // Pass *all* valid logs — buildRetroProjection filters out games on/after
-    // target.date so the projection never peeks at the truth.
-    const priorLogsCount = valid.filter(g => new Date(g.date).getTime() < new Date(target.date).getTime()).length;
+    // GameLog.id is `${playerId}-${eventId}` for ESPN — extract eventId so we
+    // can pull the DraftKings game total from ESPN's summary endpoint.
+    const eventId = target.id.split("-").pop();
+    const [opp, vegas] = await Promise.all([
+      target.opponent ? provider.getOpponentContext(target.opponent) : Promise.resolve(null),
+      eventId ? fetchGameOdds(eventId) : Promise.resolve(null),
+    ]);
     const { projection } = await buildRetroProjection({
       player: enriched,
       allLogs: valid,
@@ -107,10 +110,10 @@ async function benchmarkPlayer(query: string): Promise<PlayerBench> {
       opponentAbbr: target.opponent,
       homeAway: target.homeAway,
       isPlayoffs: isPlayoffDate(target.date),
+      vegasGameTotal: vegas?.overUnder,
+      eventId,
       dataSource: provider.name,
     });
-    // (intentionally no debug attached — keep route output clean)
-    void priorLogsCount;
     const pred = {
       points: projection.projected.points,
       rebounds: projection.projected.rebounds,
@@ -156,8 +159,21 @@ async function benchmarkPlayer(query: string): Promise<PlayerBench> {
   };
 }
 
-export async function GET() {
-  const results = await Promise.all(PLAYER_QUERIES.map(benchmarkPlayer));
+export async function GET(req: Request) {
+  // ?players=Curry,LeBron,Embiid  — comma-separated, override default list.
+  // ?n=10  — limit count (faster runs).
+  const url = new URL(req.url);
+  const playersParam = url.searchParams.get("players");
+  const limit = Number(url.searchParams.get("n") ?? "0");
+  let queries: string[];
+  if (playersParam) {
+    queries = playersParam.split(",").map((s) => s.trim()).filter(Boolean);
+  } else {
+    queries = DEFAULT_PLAYER_QUERIES;
+  }
+  if (limit > 0) queries = queries.slice(0, limit);
+
+  const results = await Promise.all(queries.map(benchmarkPlayer));
 
   // Aggregate league-wide MAE.
   const overall = {} as Record<StatKey, { sum: number; count: number }>;
@@ -176,7 +192,8 @@ export async function GET() {
 
   return NextResponse.json({
     note: "Backtest: for each player's most-recent ~4 valid games, prediction generated using ONLY games before that date. Compared to ESPN's actual stat line.",
-    model: "courtsight-formula-v3.2",
+    model: "courtsight-formula-v3.3",
+    queriesRun: queries.length,
     overallMae,
     players: results,
     timestamp: new Date().toISOString(),

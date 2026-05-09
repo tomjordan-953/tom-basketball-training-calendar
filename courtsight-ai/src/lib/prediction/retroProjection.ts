@@ -22,6 +22,8 @@ interface RetroArgs {
   opponentAbbr?: string;
   homeAway?: "home" | "away";
   isPlayoffs?: boolean;
+  vegasGameTotal?: number;
+  eventId?: string;
   dataSource: "demo" | "balldontlie" | "espn";
 }
 
@@ -42,6 +44,8 @@ export async function buildRetroProjection({
   opponentAbbr,
   homeAway,
   isPlayoffs,
+  vegasGameTotal,
+  eventId,
   dataSource,
 }: RetroArgs): Promise<RetroProjectionResult> {
   // Keep only games strictly BEFORE the target date so the projection isn't
@@ -60,6 +64,7 @@ export async function buildRetroProjection({
         daysOfRest: 1,
         isBackToBack: false,
         isPlayoffs,
+        eventId,
       }
     : null;
   const calibration = await getPlayerCalibration(player.id);
@@ -82,6 +87,7 @@ export async function buildRetroProjection({
     dataSource,
     isPlayoffs,
     calibration,
+    vegasGameTotal,
   });
   return { projection, hindsightSafe: priorLogs.length > 0 && !usedAll };
 }
