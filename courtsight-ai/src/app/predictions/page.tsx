@@ -6,7 +6,7 @@ import { TeamLogo } from "@/components/ui/TeamLogo";
 import { fetchStandings } from "@/lib/data/standings";
 import { fetchLeaders } from "@/lib/data/leagueLeaders";
 import { predictChampionship } from "@/lib/predictions/championship";
-import { predictMVP, predictROY, type AwardCandidate } from "@/lib/predictions/awards";
+import { predictMVP, predictROY, predictDPOY, type AwardCandidate } from "@/lib/predictions/awards";
 import { getProvider } from "@/lib/data/providers";
 
 export const dynamic = "force-dynamic";
@@ -46,13 +46,12 @@ export default async function PredictionsPage() {
   ]);
 
   const champ = predictChampionship(standings, leaders, injuredNames);
-  const mvp = predictMVP({ leaders, standings, injuredNames });
-  let roy: AwardCandidate[] = [];
-  try {
-    roy = await predictROY(provider, { leaders, standings, injuredNames }, currentSeasonStartYear());
-  } catch {
-    roy = [];
-  }
+  const args = { leaders, standings, injuredNames, provider };
+  const [mvp, dpoy, roy] = await Promise.all([
+    predictMVP(args).catch((): AwardCandidate[] => []),
+    predictDPOY(args).catch((): AwardCandidate[] => []),
+    predictROY(args).catch((): AwardCandidate[] => []),
+  ]);
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -176,9 +175,25 @@ export default async function PredictionsPage() {
         </CardBody>
       </Card>
 
+      {/* DPOY race */}
+      <Card>
+        <CardHeader title="Defensive Player of the Year" subtitle="Stocks (BLK + STL) + team defensive rating" />
+        <CardBody>
+          {dpoy.length === 0 ? (
+            <p className="text-sm text-white/50">No DPOY candidates surfaced.</p>
+          ) : (
+            <div className="space-y-3">
+              {dpoy.map((c, i) => (
+                <CandidateRow key={c.athleteId} c={c} rank={i + 1} />
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
       {/* ROY race */}
       <Card>
-        <CardHeader title="Rookie of the Year" subtitle="Top scorers drafted in the current class" />
+        <CardHeader title="Rookie of the Year" subtitle="Real 2025 rookie class — Cooper Flagg, Dylan Harper, VJ Edgecombe etc." />
         <CardBody>
           {roy.length === 0 ? (
             <p className="text-sm text-white/50">
@@ -204,7 +219,7 @@ export default async function PredictionsPage() {
             <LeaderColumn title="Assists / G" entries={leaders.assistsPerGame.slice(0, 5)} />
             <LeaderColumn title="Steals / G" entries={leaders.stealsPerGame.slice(0, 5)} />
             <LeaderColumn title="Blocks / G" entries={leaders.blocksPerGame.slice(0, 5)} />
-            <LeaderColumn title="PER" entries={leaders.per.slice(0, 5)} />
+            <LeaderColumn title="3P% (min qual.)" entries={leaders.threePointPercentage.slice(0, 5)} />
           </div>
         </CardBody>
       </Card>

@@ -40,16 +40,19 @@ function parseEntry(entry: RawEntry, conference: "East" | "West"): TeamStanding 
   if (!abbr) return null;
   const get = (n: string): number =>
     Number(entry.stats?.find((s) => s.name === n)?.value ?? 0);
+  const wins = get("wins");
+  const losses = get("losses");
   return {
     abbreviation: abbr,
     espnId: id,
     conference,
     seed: get("playoffSeed") || 99,
-    wins: get("wins"),
-    losses: get("losses"),
+    wins,
+    losses,
     winPct: get("winPercent"),
+    // ESPN doesn't expose `gamesPlayed` directly in standings — derive it.
+    gamesPlayed: wins + losses,
     pointDifferential: get("pointDifferential"),
-    gamesPlayed: get("gamesPlayed"),
     avgPointsFor: get("avgPointsFor"),
     avgPointsAgainst: get("avgPointsAgainst"),
   };
