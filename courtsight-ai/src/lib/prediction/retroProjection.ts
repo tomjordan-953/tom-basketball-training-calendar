@@ -63,13 +63,22 @@ export async function buildRetroProjection({
       }
     : null;
   const calibration = await getPlayerCalibration(player.id);
+  // CRITICAL: do NOT inherit today's injury status into a retro projection
+  // for a past game. We have no way to know whether the player was on the
+  // injury report at the time. The fact that the player has a real gamelog
+  // entry for that date is the strongest evidence they played. Forcing
+  // status to "Active" keeps the per-36 model honest about past games.
+  const retroInjury =
+    new Date(targetDate).getTime() < Date.now() - 6 * 60 * 60 * 1000
+      ? { status: "Active" as const, note: "Retro projection — current injury status irrelevant for past game.", source: "—" }
+      : injury;
   const projection = buildProjection({
     player,
     logs: priorLogs.length > 0 ? priorLogs : allLogs,
     season,
     nextGame,
     opponent,
-    injury,
+    injury: retroInjury,
     dataSource,
     isPlayoffs,
     calibration,
