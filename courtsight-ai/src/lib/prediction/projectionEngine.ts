@@ -37,7 +37,7 @@ import { restAdjustment } from "./restAdjustments";
 import { injuryAdjustment } from "./injuryAwareness";
 import { applyCalibration } from "@/lib/tracking/calibration";
 
-export const MODEL_VERSION = "courtsight-formula-v3.1";
+export const MODEL_VERSION = "courtsight-formula-v3.2";
 
 // Magnitude of the home/away bias correction. Real splits in the NBA are
 // ~3% on PTS — capped here to avoid amplifying noise.
@@ -45,6 +45,20 @@ const HA_BLEND = 0.5;
 // Playoff multipliers — stars play heavier minutes and shoot more.
 const PLAYOFF_MIN_MUL = 1.06;
 const PLAYOFF_PTS_MUL = 1.04;
+// Head-to-head weighting (matchup-specific games against this opponent).
+const H2H_BLEND = 0.20;            // 20% weight on H2H per-36 mean
+const H2H_MIN_GAMES = 2;           // need at least 2 H2H games to apply
+// Opponent-injury usage bump — every "Out" or "Day-to-Day" star (>=25 MPG)
+// on the opponent shifts production opportunities our way.
+const OPP_INJURY_BUMP_PER = 0.012; // +1.2% per missing key opponent
+const OPP_INJURY_BUMP_CAP = 0.05;  // cap at +5%
+// Schedule fatigue — # games in the trailing 7 days. 4 in 7 = real fatigue.
+const FATIGUE_THRESHOLD_GAMES = 4;
+const FATIGUE_PER_EXTRA_GAME = 0.018; // -1.8% scoring per extra game beyond 3 in 7
+const FATIGUE_CAP = 0.05;
+// Trimmed-mean ensemble blend. Smooths the per-36 result with a robust
+// IQR-trimmed average of the last N raw counting stats.
+const ENSEMBLE_TRIMMED_BLEND = 0.18;
 
 type StatKey =
   | "points"
@@ -96,6 +110,9 @@ interface BuildArgs {
   // v3.1 additions — all optional so callers can opt in incrementally.
   isPlayoffs?: boolean;
   calibration?: import("@/lib/tracking/calibration").PlayerCalibration | null;
+  // v3.2 additions
+  opponentInjuryCount?: number; // # of high-minute opponents listed Out / D2D
+  scheduleDensity?: number; // # of player's games in trailing 7 days incl. next
 }
 
 // ---------- helpers ---------------------------------------------------------
@@ -242,6 +259,45 @@ function projectStat(
     sampleSize: per36s.length,
     cv,
   };
+}
+
+// Trimmed mean — drop top and bottom value (or two on bigger samples) and
+// average the rest. Robust against single-game outliers like a 0-min DNP
+// that slipped through filtering, or a 50-pt explosion.
+function trimmedMean(values: number[]): number {
+  if (values.length === 0) return 0;
+  if (values.length <= 3) return average(values);
+  const sorted = [...values].sort((a, b) => a - b);
+  const trim = sorted.length >= 8 ? 2 : 1;
+  return average(sorted.slice(trim, sorted.length - trim));
+}
+
+// Head-to-head: per-36 mean of games against the upcoming opponent.
+function headToHeadPer36(
+  recent: GameLog[],
+  opponentAbbr: string | undefined,
+  stat: keyof Pick<GameLog, "points" | "rebounds" | "assists" | "steals" | "blocks" | "turnovers">,
+): { rate: number; games: number } {
+  if (!opponentAbbr) return { rate: 0, games: 0 };
+  const matches = recent.filter(
+    (g) => (g.opponent ?? "").toUpperCase() === opponentAbbr.toUpperCase(),
+  );
+  if (matches.length === 0) return { rate: 0, games: 0 };
+  const rates = matches.map((g) => per36(g[stat], g.minutes));
+  return { rate: average(rates), games: matches.length };
+}
+
+// Schedule density: how many games in the trailing 7 days (counting the
+// upcoming game as +1)? > 3 = real fatigue, capped at FATIGUE_CAP.
+export function computeScheduleDensity(logs: GameLog[], nextDateIso?: string): number {
+  if (!nextDateIso) return 0;
+  const next = new Date(nextDateIso).getTime();
+  const sevenDaysAgo = next - 7 * 86400_000;
+  const inWindow = logs.filter((g) => {
+    const t = new Date(g.date).getTime();
+    return t > sevenDaysAgo && t < next;
+  }).length;
+  return inWindow + 1; // +1 for the upcoming game itself
 }
 
 // Compute the player's own home/away delta from their recent valid games.
@@ -486,23 +542,42 @@ export function buildProjection(args: BuildArgs): Projection {
   // Home/away split derived from this player's own gamelog.
   const ha = homeAwayPointsMultiplier(recent, nextGame);
 
+  // Opponent-injury usage bump — when an opponent's high-minute player is
+  // out, the player we're projecting tends to absorb shots / minutes /
+  // touches. Capped to prevent over-reaction.
+  const opponentInjuryBump = clamp(
+    (args.opponentInjuryCount ?? 0) * OPP_INJURY_BUMP_PER,
+    0,
+    OPP_INJURY_BUMP_CAP,
+  );
+
+  // Schedule fatigue from the player's own gamelog density.
+  const density = args.scheduleDensity ?? computeScheduleDensity(recent, nextGame?.date);
+  const fatiguePenalty = density > FATIGUE_THRESHOLD_GAMES
+    ? clamp((density - 3) * FATIGUE_PER_EXTRA_GAME, 0, FATIGUE_CAP)
+    : 0;
+
   // Playoff bumps — only meaningful for high-minute role players.
   const playoffPtsMul = args.isPlayoffs ? PLAYOFF_PTS_MUL : 1;
   const playoffMinMul = args.isPlayoffs ? PLAYOFF_MIN_MUL : 1;
 
-  // Smaller magnitudes than v2 so per-36 model dominates. Home/away and
-  // playoffs layer on top.
+  // Smaller magnitudes than v2 so per-36 model dominates. Home/away,
+  // playoffs, opponent-injury usage bump and fatigue layer on top.
   const offenseMul =
     (1 + (matchup.pointsMultiplier - 1) * 0.7) *
     rest.multiplier *
     inj.multiplier *
     ha.mul *
-    playoffPtsMul;
+    playoffPtsMul *
+    (1 + opponentInjuryBump) *
+    (1 - fatiguePenalty);
   const contextMul =
     (1 + (matchup.paceMultiplier - 1) * 0.5) *
     rest.multiplier *
     inj.multiplier *
-    playoffPtsMul; // pace bump applies to context stats too in playoffs
+    playoffPtsMul *
+    (1 + opponentInjuryBump * 0.7) *
+    (1 - fatiguePenalty * 0.7);
 
   if (rest.minutesDelta) projMinutes += rest.minutesDelta * 0.6;
   if (args.isPlayoffs) projMinutes *= playoffMinMul;
@@ -536,16 +611,49 @@ export function buildProjection(args: BuildArgs): Projection {
     tov.expected = tov.floor = tov.ceiling = 0;
   }
 
+  // Trimmed-mean ensemble + head-to-head blend.
+  // For each volume stat, mix the per-36 result with:
+  //   (a) a trimmed mean of the player's last-N raw outputs in that stat
+  //   (b) a per-36 mean from games specifically vs this opponent (H2H),
+  //       projected through projMinutes.
+  // Both are bounded blends so the per-36 base remains the main signal.
+  const ensembleStat = (
+    perStatExpected: number,
+    rawValues: number[],
+    h2hRate: { rate: number; games: number },
+  ): number => {
+    let value = perStatExpected;
+    if (rawValues.length >= 4) {
+      const trimmed = trimmedMean(rawValues);
+      value = value * (1 - ENSEMBLE_TRIMMED_BLEND) + trimmed * ENSEMBLE_TRIMMED_BLEND;
+    }
+    if (h2hRate.games >= H2H_MIN_GAMES) {
+      const h2hExpected = (h2hRate.rate / 36) * projMinutes;
+      value = value * (1 - H2H_BLEND) + h2hExpected * H2H_BLEND;
+    }
+    return value;
+  };
+
+  const rawByKey = (key: keyof Pick<GameLog, "points" | "rebounds" | "assists" | "steals" | "blocks" | "turnovers">) =>
+    recent.slice(0, 12).map((g) => g[key]);
+
+  const ptsBlend = ensembleStat(pts.expected, rawByKey("points"), headToHeadPer36(recent, nextGame?.opponent, "points"));
+  const rebBlend = ensembleStat(reb.expected, rawByKey("rebounds"), headToHeadPer36(recent, nextGame?.opponent, "rebounds"));
+  const astBlend = ensembleStat(ast.expected, rawByKey("assists"), headToHeadPer36(recent, nextGame?.opponent, "assists"));
+  const stlBlend = ensembleStat(stl.expected, rawByKey("steals"), headToHeadPer36(recent, nextGame?.opponent, "steals"));
+  const blkBlend = ensembleStat(blk.expected, rawByKey("blocks"), headToHeadPer36(recent, nextGame?.opponent, "blocks"));
+  const tovBlend = ensembleStat(tov.expected, rawByKey("turnovers"), headToHeadPer36(recent, nextGame?.opponent, "turnovers"));
+
   // Apply learned per-player calibration LAST (so it corrects systematic
   // bias from everything upstream).
   const calibratedLine = applyCalibration(
     {
-      points: pts.expected,
-      rebounds: reb.expected,
-      assists: ast.expected,
-      steals: stl.expected,
-      blocks: blk.expected,
-      turnovers: tov.expected,
+      points: ptsBlend,
+      rebounds: rebBlend,
+      assists: astBlend,
+      steals: stlBlend,
+      blocks: blkBlend,
+      turnovers: tovBlend,
       minutes: projMinutes,
     },
     args.calibration ?? null,
@@ -642,6 +750,34 @@ export function buildProjection(args: BuildArgs): Projection {
       group: "data",
       impact: Math.abs(ptsBias) >= 0.6 ? (ptsBias > 0 ? "positive" : "negative") : "neutral",
       description: `Bias-corrected from ${args.calibration.appliedCount} graded games for this player (PTS shift ${ptsBias >= 0 ? "+" : ""}${ptsBias.toFixed(1)}).`,
+    });
+  }
+
+  const h2hPts = headToHeadPer36(recent, nextGame?.opponent, "points");
+  if (h2hPts.games >= H2H_MIN_GAMES) {
+    factors.push({
+      label: "Head-to-head",
+      group: "matchup",
+      impact: "neutral",
+      description: `${h2hPts.games} prior game(s) vs ${nextGame!.opponent} this season — per-36 PTS ${h2hPts.rate.toFixed(1)} blended in at ${(H2H_BLEND * 100).toFixed(0)}% weight.`,
+    });
+  }
+
+  if (opponentInjuryBump > 0) {
+    factors.push({
+      label: "Opponent injuries",
+      group: "matchup",
+      impact: "positive",
+      description: `${args.opponentInjuryCount} key opponent(s) listed Out / Day-to-Day — usage bump × ${(1 + opponentInjuryBump).toFixed(3)}.`,
+    });
+  }
+
+  if (fatiguePenalty > 0) {
+    factors.push({
+      label: "Schedule fatigue",
+      group: "rest",
+      impact: "negative",
+      description: `${density} games in trailing 7 days incl. next — scoring penalty × ${(1 - fatiguePenalty).toFixed(3)}.`,
     });
   }
 

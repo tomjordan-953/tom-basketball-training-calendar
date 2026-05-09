@@ -469,6 +469,54 @@ class EspnProvider implements SportsDataProvider {
     return hit;
   }
 
+  // Public-ish: count high-minute opponents currently Out / Day-to-Day from
+  // the same league-wide ESPN injury feed. Used by the projection engine to
+  // bump usage when key matchup defenders / minute-eaters are missing.
+  async getTeamInjuryStats(teamAbbr: string): Promise<{ outOrDoubt: number; players: string[] }> {
+    const data = await this.fetchJson<EspnInjuriesResponse>(
+      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries",
+    );
+    const team = (data?.injuries ?? []).find(
+      (t) => (t.displayName ?? "").toUpperCase().includes(teamAbbr.toUpperCase()) ||
+             this.matchTeamByDisplayName(t.displayName, teamAbbr),
+    );
+    if (!team) return { outOrDoubt: 0, players: [] };
+    const players: string[] = [];
+    let count = 0;
+    for (const inj of team.injuries ?? []) {
+      const status = (inj.status ?? "").toLowerCase();
+      if (status.startsWith("out") || status.includes("day-to-day") || status.includes("doubtful") || status.includes("questionable")) {
+        const name = inj.athlete?.displayName ?? `${inj.athlete?.firstName ?? ""} ${inj.athlete?.lastName ?? ""}`.trim();
+        if (name) players.push(name);
+        count++;
+      }
+    }
+    return { outOrDoubt: count, players };
+  }
+
+  private matchTeamByDisplayName(displayName?: string, abbr?: string): boolean {
+    if (!displayName || !abbr) return false;
+    // ESPN injuries displayName is the full team name e.g. "Oklahoma City
+    // Thunder". Build a quick fallback by matching obvious cities.
+    const map: Record<string, string[]> = {
+      OKC: ["oklahoma"], DEN: ["denver"], LAL: ["lakers"], LAC: ["clippers"],
+      BOS: ["celtics"], GSW: ["warriors"], MIA: ["heat"], MIL: ["bucks"],
+      NYK: ["knicks"], BKN: ["nets"], PHI: ["76ers", "philadelphia"],
+      MIN: ["timberwolves"], DAL: ["mavericks"], HOU: ["rockets"],
+      MEM: ["grizzlies"], NOP: ["pelicans"], SAS: ["spurs"],
+      PHX: ["phoenix", "suns"], POR: ["portland", "blazers"],
+      SAC: ["sacramento", "kings"], UTA: ["utah", "jazz"],
+      ATL: ["atlanta", "hawks"], CHA: ["charlotte", "hornets"],
+      CHI: ["chicago", "bulls"], CLE: ["cleveland", "cavaliers"],
+      DET: ["detroit", "pistons"], IND: ["indiana", "pacers"],
+      ORL: ["orlando", "magic"], TOR: ["toronto", "raptors"],
+      WSH: ["washington", "wizards"],
+    };
+    const tokens = map[abbr.toUpperCase()] ?? [];
+    const lower = displayName.toLowerCase();
+    return tokens.some((t) => lower.includes(t));
+  }
+
   private async getInjuryIndex(): Promise<Map<string, InjuryNote>> {
     const cacheKey = "espn-injury-index";
     const hit = cacheGet<Array<[string, InjuryNote]>>(cacheKey);

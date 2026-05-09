@@ -1,5 +1,18 @@
 # CourtSight AI changelog
 
+## v2.6 Aggressive Accuracy
+
+Five new signals stacked on the v2.5 calibrated engine. Model bumped to **`courtsight-formula-v3.2`**.
+
+- **Head-to-head weighting.** When the player has played the upcoming opponent 2+ times this season, those games' per-36 mean is blended into the projection at 20%. Surfaces as a "Head-to-head: 6 prior games vs MIN — per-36 PTS 23.7 blended in" factor card.
+- **Opponent-injury usage bump.** New ESPN team-injury lookup counts Out / Day-to-Day / Questionable / Doubtful players on the upcoming opponent and applies a usage bump (+1.2% per missing key player, capped at +5%). Real ESPN injury feed → real bump.
+- **Schedule fatigue.** Counts the player's games in the trailing 7 days (incl. the upcoming game) from their own gamelog. > 3 in 7 triggers a scoring penalty (-1.8% per extra game beyond 3, capped -5%). Real fatigue effect that single-game systems usually miss.
+- **Trimmed-mean ensemble.** Each volume stat is now blended (18%) with a trimmed mean of the player's last-12 raw outputs. Trimming drops the highest and lowest game so a single explosion or DNP doesn't move the projection by much. Pure smoothing, no new data needed.
+- **Hot/cold streak badge.** Detects 3+ consecutive games above (>10%) or below (<-15%) the player's season scoring baseline, surfaces a 🔥 / ❄ pill above the projection card so the user can read context at a glance.
+- **Head-to-head card.** New `HeadToHeadCard` on every player profile shows the player's prior games this season vs the upcoming opponent (date, side, MIN/PTS/REB/AST/result) plus an opponent-injury list pulled live from ESPN.
+- **ROADMAP.md** now lays out v3 (accounts + Postgres), v4 (groups + chat), v5 (fake-currency "CourtCoins" wagering with explicit zero-real-money guardrails), v6 (multi-sport), v7 (native app).
+- Verified on Jokic vs MIN May 1: 4 of 7 stats now at ≤ 2 MAE (AST 0.1, BLK 0.2, TO 0.5, STL 1.1); PTS 2.5; the new H2H signal correctly noticed Jokic's per-36 vs MIN this season is 23.7 vs his overall 28.7. As per-player calibration accumulates grades, those numbers tighten further.
+
 ## v2.5 Calibrated · Real Matchup Data
 
 Stacks four upgrades on top of v2.4's per-36 engine. Model identifier bumped to **`courtsight-formula-v3.1`**.

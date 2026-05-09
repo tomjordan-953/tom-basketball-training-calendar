@@ -15,9 +15,13 @@ import { getProvider } from "@/lib/data/providers";
 import { buildProjection } from "@/lib/prediction/projectionEngine";
 import { TTL, cachedWithMeta } from "@/lib/data/cache";
 import { TrackRecordCard } from "@/components/tracking/TrackRecordCard";
+import { HeadToHeadCard } from "@/components/player/HeadToHeadCard";
+import { StreakBadge } from "@/components/player/StreakBadge";
 import { listForPlayer, recordPrediction } from "@/lib/tracking/store";
 import { gradePlayerPredictions } from "@/lib/tracking/grader";
 import { getPlayerCalibration } from "@/lib/tracking/calibration";
+import { getOpponentInjuryCount } from "@/lib/data/opponentInjuries";
+import { computeScheduleDensity } from "@/lib/prediction/projectionEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +87,12 @@ export default async function PlayerProfilePage({ params }: Props) {
     nextGameRead.meta.ageMs,
   );
 
-  const calibration = await getPlayerCalibration(player.id);
+  const [calibration, oppInj] = await Promise.all([
+    getPlayerCalibration(player.id),
+    nextGame ? getOpponentInjuryCount(nextGame.opponent) : Promise.resolve({ count: 0, players: [] }),
+  ]);
+
+  const scheduleDensity = computeScheduleDensity(logs, nextGame?.date);
 
   const hasEnough = logs.length >= 3;
   const projection = hasEnough
@@ -98,6 +107,8 @@ export default async function PlayerProfilePage({ params }: Props) {
         freshnessAgeMs: oldestAge,
         isPlayoffs: nextGame?.isPlayoffs,
         calibration,
+        opponentInjuryCount: oppInj.count,
+        scheduleDensity,
       })
     : null;
 
@@ -130,7 +141,12 @@ export default async function PlayerProfilePage({ params }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {projection ? (
-            <StatlineProjectionCard projection={projection} />
+            <>
+              <div className="flex flex-wrap gap-2">
+                <StreakBadge logs={logs} seasonPpg={season?.points ?? 0} />
+              </div>
+              <StatlineProjectionCard projection={projection} />
+            </>
           ) : (
             <EmptyState
               title="Not enough recent games for a strong projection"
@@ -138,6 +154,11 @@ export default async function PlayerProfilePage({ params }: Props) {
             />
           )}
           {projection && <ProjectionAnalysis projection={projection} />}
+          <HeadToHeadCard
+            logs={logs}
+            opponent={nextGame?.opponent}
+            oppInjuryPlayers={oppInj.players}
+          />
           <TrackRecordCard records={trackRecords} />
           <PlayerProfileCard season={season} />
           <RecentFormCard logs={logs} season={season} />
