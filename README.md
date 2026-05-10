@@ -2,6 +2,12 @@
 
 Smart basketball performance dashboard for Tom. It detects the current date and time, reads the training plan, and puts the most important answer first: what to do now.
 
+## Current Plan Start
+
+The active plan now starts on **Monday 11 May 2026** with Week 1. The old Ramp-In dates from 6-10 May are no longer part of the active calendar, so the app will not treat that rest/DOMS window as missed training.
+
+Start Monday with the Week 1 Main Skill session. Do not catch up missed Ramp-In work. If bicep soreness comes back sharply, cut handles/extra volume and keep form shooting, free throws, and recovery.
+
 ## UI Overview
 
 - **Now:** smart session card, action buttons, today timeline, current/next drill, branch choices, Plan B, and full session details.
@@ -40,13 +46,14 @@ The Now card changes mode:
 Each session supports:
 
 - **Start Session**
-- **Complete**
-- **Didn’t happen**
-- **Skip**
-- **Move +30m**
-- **Move +1h**
-- **Move custom**
-- **Log**
+- **Complete Session**
+- **Complete Drill**
+- **Mark as Didn't Happen**
+- **Mark as Handled**
+- **Skip Today**
+- **Move +30 min**
+- **Move +1 hour**
+- **Log Session**
 
 These actions save to `localStorage` and update the Now card, timeline, weekly completion, exports, and ChatGPT pack.
 
@@ -74,6 +81,7 @@ Plan B asks what happened and gives exact alternatives for:
 - slept under 7 hours
 - soreness 7+
 - no time
+- session did not happen
 - other
 
 Applying Plan B saves an adjustment for that day and includes it in exports.
